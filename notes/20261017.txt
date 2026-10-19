@@ -1,0 +1,7 @@
+# My $20 USB Arducam's capabilities-
+$ sudo ffmpeg -hide_banner -f v4l2 -list_formats all -i /dev/video1
+
+[video4linux2,v4l2 @ 0x2253680] Raw       :     yuyv422 :           YUYV 4:2:2 : 640x480 1920x1080 1280x960 1280x720 800x600 320x240 640x480
+[video4linux2,v4l2 @ 0x2253680] Compressed:       mjpeg :          Motion-JPEG : 1920x1080 1280x960 1280x720 800x600 640x480 320x240 1920x1080
+[in#0 @ 0x2250cb0] Error opening input: Immediate exit requested
+Error opening input file /dev/video1.
