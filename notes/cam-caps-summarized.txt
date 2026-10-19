@@ -1,0 +1,18 @@
+perl -ane 'BEGIN{$"=": ";} chop; ($label)=$_=~m|^  ([a-z]+.*)$|i; $a[0]=$label if $label; ($id)=$_=~m|^    ID\s+: (0x0[0-9a-f]+)|i; $a[1]=$id; if($a[0] && $a[1]){push @b,"@a"; @a=()} END{$"="\n"; print "@b\n"}' notes/cam-capabs-*.txt|sort |uniq -c|sort -n
+
+1 Focus, Absolute: 0x00000015
+1 Focus, Automatic Continuous: 0x00000014
+1 Gain: 0x00000003
+2 Auto Exposure: 0x0000000f
+2 Backlight Compensation: 0x0000000c
+2 Brightness: 0x00000001
+2 Contrast: 0x00000002
+2 Exposure, Dynamic Framerate: 0x00000010
+2 Exposure Time, Absolute: 0x00000011
+2 Gamma: 0x00000006
+2 Hue: 0x00000005
+2 Power Line Frequency: 0x0000000d
+2 Saturation: 0x00000004
+2 Sharpness: 0x00000007
+2 White Balance, Automatic: 0x00000009
+2 White Balance Temperature: 0x00000008

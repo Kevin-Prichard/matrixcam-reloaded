@@ -1,0 +1,107 @@
+[libwebcam] Invalid V4L2 control type encountered: ctrl_id = 0x00980001, name = 'User Controls', type = 6
+[libwebcam] Invalid or unsupported V4L2 control encountered: ctrl_id = 0x00980001, name = 'User Controls'
+[libwebcam] Invalid V4L2 control type encountered: ctrl_id = 0x009A0001, name = 'Camera Controls', type = 6
+[libwebcam] Invalid V4L2 control type encountered: ctrl_id = 0x00990001, name = 'Codec Controls', type = 6
+[libwebcam] Unknown V4L2 MPEG control ID encountered: 0x00990A6B (V4L2_CID_MPEG_BASE + 363)
+[libwebcam] Invalid V4L2 control type encountered: ctrl_id = 0x00A40001, name = 'Stateless Codec Controls', type = 6
+[libwebcam] Unknown V4L2 control ID encountered: 0x00A40900
+[libwebcam] Unknown V4L2 control ID encountered: 0x00A40901
+[libwebcam] Unknown V4L2 control ID encountered: 0x00A40A95
+[libwebcam] Unknown V4L2 control ID encountered: 0x00A40A96
+Listing available controls for device /dev/video1:
+  Brightness
+    ID      : 0x00000001,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ -64 .. 64, step size: 1 ],
+    Default : 0
+  Contrast
+    ID      : 0x00000002,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 64, step size: 1 ],
+    Default : 32
+  Saturation
+    ID      : 0x00000004,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 128, step size: 1 ],
+    Default : 64
+  Hue
+    ID      : 0x00000005,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ -40 .. 40, step size: 1 ],
+    Default : 0
+  White Balance, Automatic
+    ID      : 0x00000009,
+    Type    : Boolean,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 1, step size: 1 ],
+    Default : 1
+  Gamma
+    ID      : 0x00000006,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 72 .. 500, step size: 1 ],
+    Default : 100
+  Gain
+    ID      : 0x00000003,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 100, step size: 1 ],
+    Default : 0
+  Power Line Frequency
+    ID      : 0x0000000d,
+    Type    : Choice,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : { 'Disabled'[0], '50 Hz'[1], '60 Hz'[2] },
+    Default : 2
+  White Balance Temperature
+    ID      : 0x00000008,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 2800 .. 6500, step size: 1 ],
+    Default : 4600
+  Sharpness
+    ID      : 0x00000007,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 6, step size: 1 ],
+    Default : 3
+  Backlight Compensation
+    ID      : 0x0000000c,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 2, step size: 1 ],
+    Default : 1
+  Auto Exposure
+    ID      : 0x0000000f,
+    Type    : Choice,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : { 'Manual Mode'[1], 'Aperture Priority Mode'[3] },
+    Default : 3
+  Exposure Time, Absolute
+    ID      : 0x00000011,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 1 .. 5000, step size: 1 ],
+    Default : 157
+  Exposure, Dynamic Framerate
+    ID      : 0x00000010,
+    Type    : Boolean,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 1, step size: 1 ],
+    Default : 0
+  Focus, Absolute
+    ID      : 0x00000015,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 1 .. 831, step size: 1 ],
+    Default : 1
+  Focus, Automatic Continuous
+    ID      : 0x00000014,
+    Type    : Boolean,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 1, step size: 1 ],
+    Default : 1

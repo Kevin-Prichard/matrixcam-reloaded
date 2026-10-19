@@ -1,0 +1,83 @@
+[libwebcam] Invalid V4L2 control type encountered: ctrl_id = 0x00980001, name = 'User Controls', type = 6
+[libwebcam] Invalid or unsupported V4L2 control encountered: ctrl_id = 0x00980001, name = 'User Controls'
+[libwebcam] Invalid V4L2 control type encountered: ctrl_id = 0x009A0001, name = 'Camera Controls', type = 6
+[libwebcam] Invalid or unsupported V4L2 control encountered: ctrl_id = 0x009A0001, name = 'Camera Controls'
+Listing available controls for device /dev/video0:
+  Brightness
+    ID      : 0x00000001,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 255, step size: 1 ],
+    Default : 128
+  Contrast
+    ID      : 0x00000002,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 255, step size: 1 ],
+    Default : 32
+  Saturation
+    ID      : 0x00000004,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 100, step size: 1 ],
+    Default : 64
+  Hue
+    ID      : 0x00000005,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ -180 .. 180, step size: 1 ],
+    Default : 0
+  White Balance, Automatic
+    ID      : 0x00000009,
+    Type    : Boolean,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 1, step size: 1 ],
+    Default : 1
+  Gamma
+    ID      : 0x00000006,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 90 .. 150, step size: 1 ],
+    Default : 120
+  Power Line Frequency
+    ID      : 0x0000000d,
+    Type    : Choice,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : { 'Disabled'[0], '50 Hz'[1], '60 Hz'[2] },
+    Default : 1
+  White Balance Temperature
+    ID      : 0x00000008,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 2800 .. 6500, step size: 1 ],
+    Default : 4000
+  Sharpness
+    ID      : 0x00000007,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 7, step size: 1 ],
+    Default : 2
+  Backlight Compensation
+    ID      : 0x0000000c,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 2, step size: 1 ],
+    Default : 1
+  Auto Exposure
+    ID      : 0x0000000f,
+    Type    : Choice,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : { 'Manual Mode'[1], 'Aperture Priority Mode'[3] },
+    Default : 3
+  Exposure Time, Absolute
+    ID      : 0x00000011,
+    Type    : Dword,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 4 .. 1250, step size: 1 ],
+    Default : 156
+  Exposure, Dynamic Framerate
+    ID      : 0x00000010,
+    Type    : Boolean,
+    Flags   : { CAN_READ, CAN_WRITE },
+    Values  : [ 0 .. 1, step size: 1 ],
+    Default : 0
