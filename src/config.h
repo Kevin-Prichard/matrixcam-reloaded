@@ -4,6 +4,14 @@
 
 /* One inclusive [low, high] Unicode codepoint range requested via -r. */
 typedef struct { uint32_t low, high; } codepoint_range_t;
+typedef struct { const char *name; int value; } camera_param_t;
+
+typedef enum {
+    CAMERA_PARAMS_NONE,
+    CAMERA_PARAMS_LIST,
+    CAMERA_PARAMS_GET,
+    CAMERA_PARAMS_RANGE
+} camera_params_action_t;
 
 typedef struct {
     const char *vdev, *ddev, *font_path;
@@ -19,6 +27,10 @@ typedef struct {
     int gw, gh;                  /* grid dimensions in cells, derived after capture starts */
     codepoint_range_t *codepoint_ranges;
     int codepoint_range_count;
+    camera_param_t *camera_params;
+    int camera_param_count;
+    camera_params_action_t camera_params_action;
+    const char *camera_param_query;
 } config_t;
 
 extern config_t G;

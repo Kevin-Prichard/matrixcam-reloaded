@@ -34,9 +34,30 @@ touching capture, display, or each other.
 ### CLI options
 ```
 $ ./cellavg -h
-usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue (manual focus_absolute, disables autofocus; omit for autofocus)] [-g [FGHEX:BGHEX] (luminosity, or bichrome e.g. -g 11ee11:1111ee)] [-m (disable mirror, default mirrored)]
+usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue (manual focus_absolute, disables autofocus; omit for autofocus)] [-g [FGHEX:BGHEX] (luminosity, or bichrome e.g. -g 11ee11:1111ee)] [-m (disable mirror, default mirrored)] [-p [PARAM_NAME|@PARAM_NAME|PARAM_NAME=value[,PARAM_NAME=value...]]]
 RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation
 ```
+
+### Camera controls
+V4L2 camera controls can be inspected before startup or set at startup with
+`-p`. Reporting opens the configured camera, prints to stdout, and exits;
+assignments are applied before frame capture begins. Repeat `-p` to set
+multiple controls, and use comma-separated assignments to set several at
+once:
+```
+$ ./cellavg -p
+$ ./cellavg -p brightness
+$ ./cellavg -p @brightness
+$ ./cellavg -p brightness=20 -p contrast=40
+$ ./cellavg -p brightness=20,contrast=40,wb_auto=1
+```
+Supported parameter names are `autoexp`, `backlight`, `brightness`,
+`contrast`, `exp_dyn`, `exp_abs`, `gain`, `gamma`, `hue`, `power`, `sat`,
+`sharp`, `wb_auto`, and `wb_temp`. Only controls exposed by the camera appear
+in the no-argument listing. Values are integers; setting a value outside the
+driver-reported range or menu choices is an error. The app also exposes
+`capture_camera_control_{query,get,set}` and reporting helpers in `capture.h`
+for runtime control access.
 
 ### ## Run
 ```

@@ -11,11 +11,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <poll.h>
+#include <pthread.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <linux/videodev2.h>
 
-static int vfd;
+static int vfd = -1;
+static pthread_mutex_t camera_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void *vmap[4]; static size_t vmaplen[4]; static unsigned vmapcount;
 #define CAMERA_STALL_TIMEOUT_US 3000000
 static void v4l2_reinit(void);
@@ -67,7 +69,20 @@ static int v4l2_configure(void) {
         return -1;
     }
     G.capw = f.fmt.pix.width; G.caph = f.fmt.pix.height;
+    for (int i = 0; i < G.camera_param_count; i++) {
+        if (camera_controls_validate(vfd, G.camera_params[i].name,
+                                     G.camera_params[i].value) < 0) {
+            close(vfd); vfd = -1;
+            return -1;
+        }
+    }
     apply_focus_control(vfd);
+    for (int i = 0; i < G.camera_param_count; i++) {
+        if (camera_controls_set(vfd, G.camera_params[i].name, G.camera_params[i].value) < 0) {
+            close(vfd); vfd = -1;
+            return -1;
+        }
+    }
 
     struct v4l2_requestbuffers rb; memset(&rb, 0, sizeof rb);
     rb.count = 4; rb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; rb.memory = V4L2_MEMORY_MMAP;
@@ -116,9 +131,12 @@ static void v4l2_teardown(void) {
 /* Tears down and retries v4l2_configure() until it succeeds or shutdown is
  * requested, used to recover from a disconnected/stalled camera. */
 static void v4l2_reinit(void) {
-    v4l2_teardown();
     while (running) {
-        if (v4l2_configure() == 0) {
+        pthread_mutex_lock(&camera_mutex);
+        v4l2_teardown();
+        int result = v4l2_configure();
+        pthread_mutex_unlock(&camera_mutex);
+        if (result == 0) {
             fprintf(stderr, "camera %s reconnected\n", G.vdev);
             return;
         }
@@ -127,7 +145,87 @@ static void v4l2_reinit(void) {
 }
 
 void capture_init(void) {
-    if (v4l2_configure() < 0) exit(1);
+    pthread_mutex_lock(&camera_mutex);
+    int result = v4l2_configure();
+    pthread_mutex_unlock(&camera_mutex);
+    if (result < 0) exit(1);
+}
+
+int capture_report_camera_params(void) {
+    int fd = open(G.vdev, O_RDWR | O_NONBLOCK);
+    if (fd < 0) {
+        fprintf(stderr, "%s: %s\n", G.vdev, strerror(errno));
+        return -1;
+    }
+    int result;
+    if (G.camera_params_action == CAMERA_PARAMS_LIST)
+        result = camera_controls_list(fd, stdout);
+    else if (G.camera_params_action == CAMERA_PARAMS_RANGE)
+        result = camera_controls_print_range(fd, G.camera_param_query, stdout);
+    else
+        result = camera_controls_print_value(fd, G.camera_param_query, stdout);
+    close(fd);
+    return result;
+}
+
+int capture_camera_control_query(const char *name, camera_control_info_t *info) {
+    pthread_mutex_lock(&camera_mutex);
+    if (vfd < 0) {
+        fprintf(stderr, "camera is not initialized\n");
+        pthread_mutex_unlock(&camera_mutex);
+        return -1;
+    }
+    int result = camera_controls_query(vfd, name, info);
+    pthread_mutex_unlock(&camera_mutex);
+    return result;
+}
+
+int capture_camera_control_get(const char *name, int *value) {
+    pthread_mutex_lock(&camera_mutex);
+    if (vfd < 0) {
+        fprintf(stderr, "camera is not initialized\n");
+        pthread_mutex_unlock(&camera_mutex);
+        return -1;
+    }
+    int result = camera_controls_get(vfd, name, value);
+    pthread_mutex_unlock(&camera_mutex);
+    return result;
+}
+
+int capture_camera_control_set(const char *name, int value) {
+    pthread_mutex_lock(&camera_mutex);
+    if (vfd < 0) {
+        fprintf(stderr, "camera is not initialized\n");
+        pthread_mutex_unlock(&camera_mutex);
+        return -1;
+    }
+    int result = camera_controls_set(vfd, name, value);
+    pthread_mutex_unlock(&camera_mutex);
+    return result;
+}
+
+int capture_camera_controls_list(FILE *out) {
+    pthread_mutex_lock(&camera_mutex);
+    if (vfd < 0) {
+        fprintf(stderr, "camera is not initialized\n");
+        pthread_mutex_unlock(&camera_mutex);
+        return -1;
+    }
+    int result = camera_controls_list(vfd, out);
+    pthread_mutex_unlock(&camera_mutex);
+    return result;
+}
+
+int capture_camera_control_print_range(const char *name, FILE *out) {
+    pthread_mutex_lock(&camera_mutex);
+    if (vfd < 0) {
+        fprintf(stderr, "camera is not initialized\n");
+        pthread_mutex_unlock(&camera_mutex);
+        return -1;
+    }
+    int result = camera_controls_print_range(vfd, name, out);
+    pthread_mutex_unlock(&camera_mutex);
+    return result;
 }
 
 void *capture_thread_main(void *arg) {
@@ -164,5 +262,7 @@ void *capture_thread_main(void *arg) {
 }
 
 void capture_shutdown(void) {
+    pthread_mutex_lock(&camera_mutex);
     v4l2_teardown();
+    pthread_mutex_unlock(&camera_mutex);
 }

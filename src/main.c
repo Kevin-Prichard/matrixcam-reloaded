@@ -28,6 +28,8 @@
 
 int main(int argc, char **argv) {
     config_parse_args(argc, argv);
+    if (G.camera_params_action != CAMERA_PARAMS_NONE)
+        return capture_report_camera_params() < 0 ? 1 : 0;
     install_signal_handlers();
 
     capture_init();
