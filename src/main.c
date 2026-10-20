@@ -19,6 +19,7 @@
 #include "cell_analyzer.h"
 #include "glyph_atlas.h"
 #include "glyph_visualizer.h"
+#include "delaunay_visualizer.h"
 #include "display.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,22 +37,24 @@ int main(int argc, char **argv) {
     config_derive_grid();
     printf("capture %dx%d MJPEG, workers %d\n", G.capw, G.caph, G.nworkers);
 
-    glyph_atlas_init();
+    int glyph_ready = !strcmp(G.visualizer, "glyph");
+    if (glyph_ready) glyph_atlas_init();
     display_init();
     const drmModeModeInfo *mode = display_mode();
-    const visualizer_t *vis = &glyph_visualizer;
+    const visualizer_t *vis = glyph_ready ? &glyph_visualizer : &delaunay_visualizer;
     if (vis->init(G.gw, G.gh, mode->hdisplay, mode->vdisplay) < 0) {
+        vis->shutdown();
         display_shutdown();
-        glyph_atlas_shutdown();
+        if (glyph_ready) glyph_atlas_shutdown();
         return 1;
     }
-    printf("grid %dx%d cells (%dx%d px each, jpeg scale 1/%d)\n",
-           G.gw, G.gh, G.cw, G.ch, G.denom);
+    printf("visualizer %s; grid %dx%d cells (%dx%d px each, jpeg scale 1/%d)\n",
+           vis->name, G.gw, G.gh, G.cw, G.ch, G.denom);
 
     if (pipeline_start(&cell_analyzer, G.nworkers, G.nworkers + 2, G.gw, G.gh) < 0) {
         vis->shutdown();
         display_shutdown();
-        glyph_atlas_shutdown();
+        if (glyph_ready) glyph_atlas_shutdown();
         return 1;
     }
 
@@ -101,7 +104,7 @@ int main(int argc, char **argv) {
     vis->shutdown();
     capture_shutdown();
     display_shutdown();
-    glyph_atlas_shutdown();
+    if (glyph_ready) glyph_atlas_shutdown();
     free(local);
     return 0;
 }

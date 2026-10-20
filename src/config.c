@@ -4,6 +4,7 @@
 #include "camera_controls.h"
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,8 +12,10 @@
 
 config_t G = {
     .vdev = "/dev/video1", .ddev = "/dev/dri/card0",
+    .visualizer = "glyph",
     .capw = 640, .caph = 480, .cw = 8, .ch = 8,
-    .outw = 1280, .outh = 720, .nworkers = 3, .hflip = 1, .focus_value = -1
+    .outw = 1280, .outh = 720, .nworkers = 3, .hflip = 1, .focus_value = -1,
+    .delaunay_point_count = 600, .delaunay_edge_weight = 1.0, .delaunay_seed = 1
 };
 
 static void parse_wh(const char *s, int *w, int *h) { sscanf(s, "%dx%d", w, h); }
@@ -173,6 +176,59 @@ static void parse_camera_params_arg(const char *arg) {
     free(copy);
 }
 
+/* Parses Delaunay settings as POINTS[,EDGE_WEIGHT[,SEED]]. */
+static void parse_delaunay_options(const char *arg) {
+    char *copy = strdup(arg);
+    if (!copy) { perror("Delaunay options"); exit(1); }
+    char *parts[3] = {0};
+    char *cursor = copy;
+    for (int i = 0; i < 3; i++) {
+        parts[i] = strsep(&cursor, ",");
+        if (!parts[i]) break;
+    }
+    if (cursor || !parts[0] || !*parts[0] ||
+        (parts[1] && !*parts[1]) || (parts[2] && !*parts[2])) {
+        fprintf(stderr, "invalid Delaunay options: %s (expected POINTS[,EDGE_WEIGHT[,SEED]])\n",
+                arg);
+        free(copy);
+        exit(1);
+    }
+
+    errno = 0;
+    char *end;
+    long point_count = strtol(parts[0], &end, 10);
+    if (!*parts[0] || *end || errno == ERANGE || point_count < 16 || point_count > 3000) {
+        fprintf(stderr, "invalid Delaunay point count: %s (expected 16..3000)\n", parts[0]);
+        free(copy);
+        exit(1);
+    }
+    G.delaunay_point_count = (int)point_count;
+
+    if (parts[1]) {
+        errno = 0;
+        double edge_weight = strtod(parts[1], &end);
+        if (!*parts[1] || *end || errno == ERANGE || !isfinite(edge_weight) ||
+            edge_weight < 0.0 || edge_weight > 100.0) {
+            fprintf(stderr, "invalid Delaunay edge weight: %s (expected 0..100)\n", parts[1]);
+            free(copy);
+            exit(1);
+        }
+        G.delaunay_edge_weight = edge_weight;
+    }
+    if (parts[2]) {
+        errno = 0;
+        unsigned long seed = strtoul(parts[2], &end, 10);
+        if (!*parts[2] || *end || errno == ERANGE || seed > UINT32_MAX) {
+            fprintf(stderr, "invalid Delaunay random seed: %s (expected 0..4294967295)\n",
+                    parts[2]);
+            free(copy);
+            exit(1);
+        }
+        G.delaunay_seed = (uint32_t)seed;
+    }
+    free(copy);
+}
+
 void config_parse_args(int argc, char **argv) {
     /* GNU getopt supports optional arguments only when attached; normalize -p
      * so the documented "-p NAME" form and bare "-p" are both accepted. */
@@ -192,7 +248,7 @@ void config_parse_args(int argc, char **argv) {
     normalized[normalized_argc] = NULL;
     optind = 1;
     int o;
-    while ((o = getopt(normalized_argc, normalized, "v:d:s:c:o:t:f:r:F:gp:m")) != -1) switch (o) {
+    while ((o = getopt(normalized_argc, normalized, "v:d:s:c:o:t:f:r:F:gp:mV:a:")) != -1) switch (o) {
         case 'v': G.vdev = optarg; break;
         case 'd': G.ddev = optarg; break;
         case 's': parse_wh(optarg, &G.capw, &G.caph); break;
@@ -213,18 +269,33 @@ void config_parse_args(int argc, char **argv) {
             }
             break;
         case 'm': G.hflip = 0; break;
+        case 'V':
+            if (strcmp(optarg, "glyph") && strcmp(optarg, "delaunay")) {
+                fprintf(stderr, "unknown visualizer: %s (expected glyph or delaunay)\n", optarg);
+                exit(1);
+            }
+            G.visualizer = optarg;
+            break;
+        case 'a': parse_delaunay_options(optarg); break;
         default:
             fprintf(stderr, "usage: %s [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] "
                     "[-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] "
                     "[-r RANGE[,RANGE...]] [-F focusvalue (manual focus_absolute, disables "
                     "autofocus; omit for autofocus)] [-g [FGHEX:BGHEX] (luminosity, or bichrome "
                     "e.g. -g 11ee11:1111ee)] [-m (disable mirror, default mirrored)] "
-                    "[-p [PARAM_NAME|@PARAM_NAME|PARAM_NAME=value[,PARAM_NAME=value...]]]\n"
+                    "[-p [PARAM_NAME|@PARAM_NAME|PARAM_NAME=value[,PARAM_NAME=value...]]] "
+                    "[-V glyph|delaunay] [-a POINTS[,EDGE_WEIGHT[,SEED]]]\n"
                     "  RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation\n",
                     argv[0]);
             exit(1);
     }
     free(normalized);
+    if (!strcmp(G.visualizer, "delaunay")) {
+        /* These options belong to glyph rendering and do not control the
+         * Delaunay analyzer's fixed, camera-relative sampling grid. */
+        G.cw = 8;
+        G.ch = 8;
+    }
     if (G.cw < 1 || G.ch < 1 || G.nworkers < 1) {
         fprintf(stderr, "cell dimensions and worker count must be positive\n");
         exit(1);

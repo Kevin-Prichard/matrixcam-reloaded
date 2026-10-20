@@ -15,6 +15,7 @@ typedef enum {
 
 typedef struct {
     const char *vdev, *ddev, *font_path;
+    const char *visualizer;
     int capw, caph;              /* requested/actual capture resolution */
     int cw, ch;                  /* cell size in pixels */
     int outw, outh;              /* requested display resolution */
@@ -25,6 +26,9 @@ typedef struct {
     int denom;                   /* JPEG decode scale denominator (1/denom) */
     int scw, sch;                /* source pixels sampled per cell after scaling */
     int gw, gh;                  /* grid dimensions in cells, derived after capture starts */
+    int delaunay_point_count;
+    double delaunay_edge_weight;
+    uint32_t delaunay_seed;
     codepoint_range_t *codepoint_ranges;
     int codepoint_range_count;
     camera_param_t *camera_params;

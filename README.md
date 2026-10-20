@@ -24,6 +24,8 @@ $ gcc -O3 -march=native -pthread -Wall -Wextra -Werror \
 - `glyph_atlas.{h,c}` - FreeType glyph bitmap atlas
 - `visualizer.h` - abstract analysis-grid -> framebuffer interface
 - `glyph_visualizer.{h,c}` - concrete visualizer: colored glyph rendering
+- `delaunay.{h,c}` - reusable bounded-workspace Delaunay triangulator
+- `delaunay_visualizer.{h,c}` - image-colored, edge-biased triangle mosaic
 - `display.{h,c}` - DRM/KMS scanout + page flipping
 - `main.c` - wires the modules together
 
@@ -34,9 +36,21 @@ touching capture, display, or each other.
 ### CLI options
 ```
 $ ./cellavg -h
-usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue (manual focus_absolute, disables autofocus; omit for autofocus)] [-g [FGHEX:BGHEX] (luminosity, or bichrome e.g. -g 11ee11:1111ee)] [-m (disable mirror, default mirrored)] [-p [PARAM_NAME|@PARAM_NAME|PARAM_NAME=value[,PARAM_NAME=value...]]]
+usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue] [-g [FGHEX:BGHEX]] [-m] [-p [camera parameters]] [-V glyph|delaunay] [-a POINTS[,EDGE_WEIGHT[,SEED]]]
 RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation
 ```
+
+The glyph visualizer remains the default. Select the Delaunay low-poly
+visualizer with `-V delaunay`; its `-a` tuple sets the point budget,
+edge-sampling bias, and deterministic seed (defaults: `600,1.0,1`):
+```
+$ sudo ./cellavg -V delaunay -a 900,1.5,42 -s 1280x720 -o 1280x720
+```
+In Delaunay mode, `-c`, `-f`, `-r`, and `-g` are ignored. The analyzer uses
+its fixed 8x8-pixel sampling cells; `-d`, `-s`, and `-o` retain their normal
+camera, capture-resolution, and output-resolution meanings.
+
+Run the deterministic triangulation tests with `make test`.
 
 ### Camera controls
 V4L2 camera controls can be inspected before startup or set at startup with
