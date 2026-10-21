@@ -1,18 +1,14 @@
 ### Build
 The source lives in `src/`, split into one module per pipeline stage
 (capture, analysis, visualization, display) plus shared config/pipeline
-headers. Build with:
+headers. SLIC additionally requires the fast-slic checkout at
+`candidate-dependencies/fast-slic`. Build with:
 ```
 $ make
 ```
-which is equivalent to compiling and linking every `src/*.c` file with:
-```
-$ gcc -O3 -march=native -pthread -Wall -Wextra -Werror \
-      $(pkg-config --cflags libdrm freetype2) -c src/<each>.c -o src/<each>.o
-$ gcc -O3 -march=native -pthread -Wall -Wextra -Werror \
-      $(pkg-config --cflags libdrm freetype2) -o cellavg src/*.o \
-      $(pkg-config --libs libdrm freetype2) -ljpeg
-```
+The Makefile compiles the C application and the fast-slic C++ sources,
+enabling the matching AVX2 or Neon implementation when available in the
+compiler target.
 
 ### Source layout
 - `config.{h,c}` - CLI parsing and shared tunables (`G`)
@@ -26,6 +22,8 @@ $ gcc -O3 -march=native -pthread -Wall -Wextra -Werror \
 - `glyph_visualizer.{h,c}` - concrete visualizer: colored glyph rendering
 - `delaunay.{h,c}` - reusable bounded-workspace Delaunay triangulator
 - `delaunay_visualizer.{h,c}` - image-colored, edge-biased triangle mosaic
+- `slic_analyzer.{h,cpp}` - fast-slic JPEG decode and superpixel assignment
+- `slic_visualizer.{h,c}` - threaded SLIC superpixel rendering
 - `display.{h,c}` - DRM/KMS scanout + page flipping
 - `main.c` - wires the modules together
 
@@ -36,7 +34,7 @@ touching capture, display, or each other.
 ### CLI options
 ```
 $ ./cellavg -h
-usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue] [-g [FGHEX:BGHEX]] [-m] [-p [camera parameters]] [-V glyph|delaunay] [-a POINTS[,EDGE_WEIGHT[,SEED]]]
+usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue] [-g [FGHEX:BGHEX]] [-m] [-p [camera parameters]] [-V glyph|delaunay|slic] [-a POINTS[,EDGE_WEIGHT[,SEED]]|SLIC_PARAMETER[=VALUE]]
 RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation
 ```
 
@@ -50,7 +48,25 @@ In Delaunay mode, `-c`, `-f`, `-r`, and `-g` are ignored. The analyzer uses
 its fixed 8x8-pixel sampling cells; `-d`, `-s`, and `-o` retain their normal
 camera, capture-resolution, and output-resolution meanings.
 
-Run the deterministic triangulation tests with `make test`.
+Select the SLIC superpixel visualizer with `-V slic`. It uses the native
+fast-slic C++ implementation from `candidate-dependencies/fast-slic`; each
+pipeline worker segments frames while separate render workers scale and draw
+the superpixels. SLIC ignores `-c`, `-f`, `-r`, and `-g`, and accepts these
+`-a` parameters (defaults: `clusters=400`, `iterations=5`,
+`sample_stride=3`, `compactness=10`):
+```
+$ ./cellavg -V slic -a clusters=700,iterations=4,sample_stride=2 -s 640x480 -o 1280x720
+$ ./cellavg -V slic -a
+$ ./cellavg -V slic -a clusters
+$ ./cellavg -V slic -a @clusters
+```
+Parameter bounds are `clusters=16..65534`, `iterations=1..100`,
+`sample_stride=1..16`, and `compactness=1..100`. The requested cluster count
+must also fit within the actual captured frame. `-d`, `-F`, `-p`, `-s`, and
+`-o` retain their usual device, focus, camera-control, capture-size, and
+output-size meanings.
+
+Run the Delaunay geometry and SLIC analyzer/render tests with `make test`.
 
 ### Camera controls
 V4L2 camera controls can be inspected before startup or set at startup with

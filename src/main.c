@@ -20,6 +20,8 @@
 #include "glyph_atlas.h"
 #include "glyph_visualizer.h"
 #include "delaunay_visualizer.h"
+#include "slic_analyzer.h"
+#include "slic_visualizer.h"
 #include "display.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +31,10 @@
 
 int main(int argc, char **argv) {
     config_parse_args(argc, argv);
+    if (G.slic_params_action != SLIC_PARAMS_NONE) {
+        config_print_slic_params();
+        return 0;
+    }
     if (G.camera_params_action != CAMERA_PARAMS_NONE)
         return capture_report_camera_params() < 0 ? 1 : 0;
     install_signal_handlers();
@@ -38,22 +44,48 @@ int main(int argc, char **argv) {
     printf("capture %dx%d MJPEG, workers %d\n", G.capw, G.caph, G.nworkers);
 
     int glyph_ready = !strcmp(G.visualizer, "glyph");
+    int slic_ready = !strcmp(G.visualizer, "slic");
     if (glyph_ready) glyph_atlas_init();
     display_init();
     const drmModeModeInfo *mode = display_mode();
-    const visualizer_t *vis = glyph_ready ? &glyph_visualizer : &delaunay_visualizer;
+    const visualizer_t *vis = glyph_ready ? &glyph_visualizer
+        : slic_ready ? &slic_visualizer : &delaunay_visualizer;
+    const frame_analyzer_t *analyzer = slic_ready ? &slic_analyzer : &cell_analyzer;
     if (vis->init(G.gw, G.gh, mode->hdisplay, mode->vdisplay) < 0) {
         vis->shutdown();
         display_shutdown();
         if (glyph_ready) glyph_atlas_shutdown();
         return 1;
     }
-    printf("visualizer %s; grid %dx%d cells (%dx%d px each, jpeg scale 1/%d)\n",
-           vis->name, G.gw, G.gh, G.cw, G.ch, G.denom);
+    if (slic_ready)
+        printf("visualizer %s; frame %dx%d pixels\n", vis->name, G.gw, G.gh);
+    else
+        printf("visualizer %s; grid %dx%d cells (%dx%d px each, jpeg scale 1/%d)\n",
+               vis->name, G.gw, G.gh, G.cw, G.ch, G.denom);
 
-    if (pipeline_start(&cell_analyzer, G.nworkers, G.nworkers + 2, G.gw, G.gh) < 0) {
+    size_t result_cells = (size_t)G.gw * G.gh;
+    if (result_cells > SIZE_MAX / analyzer->result_cell_size) {
+        fprintf(stderr, "analysis result grid is too large\n");
         vis->shutdown();
         display_shutdown();
+        capture_shutdown();
+        if (glyph_ready) glyph_atlas_shutdown();
+        return 1;
+    }
+    void *local = malloc(result_cells * analyzer->result_cell_size);
+    if (!local) {
+        perror("analysis result buffer");
+        vis->shutdown();
+        display_shutdown();
+        capture_shutdown();
+        if (glyph_ready) glyph_atlas_shutdown();
+        return 1;
+    }
+    if (pipeline_start(analyzer, G.nworkers, G.nworkers + 2, G.gw, G.gh) < 0) {
+        free(local);
+        vis->shutdown();
+        display_shutdown();
+        capture_shutdown();
         if (glyph_ready) glyph_atlas_shutdown();
         return 1;
     }
@@ -61,7 +93,6 @@ int main(int argc, char **argv) {
     pthread_t cap_thread;
     pthread_create(&cap_thread, NULL, capture_thread_main, NULL);
 
-    cell_t *local = malloc((size_t)G.gw * G.gh * sizeof(cell_t));
     uint64_t shown_seq = 0, t_last = now_us();
     int front = 0;
 

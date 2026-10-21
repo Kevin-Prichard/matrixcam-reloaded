@@ -15,7 +15,9 @@ config_t G = {
     .visualizer = "glyph",
     .capw = 640, .caph = 480, .cw = 8, .ch = 8,
     .outw = 1280, .outh = 720, .nworkers = 3, .hflip = 1, .focus_value = -1,
-    .delaunay_point_count = 600, .delaunay_edge_weight = 1.0, .delaunay_seed = 1
+    .delaunay_point_count = 600, .delaunay_edge_weight = 1.0, .delaunay_seed = 1,
+    .slic_cluster_count = 400, .slic_iterations = 5, .slic_sample_stride = 3,
+    .slic_compactness = 10
 };
 
 static void parse_wh(const char *s, int *w, int *h) { sscanf(s, "%dx%d", w, h); }
@@ -229,9 +231,128 @@ static void parse_delaunay_options(const char *arg) {
     free(copy);
 }
 
+typedef struct {
+    const char *name;
+    int *value;
+    int minimum, maximum;
+} slic_param_t;
+
+static slic_param_t slic_parameters[] = {
+    { "clusters", &G.slic_cluster_count, 16, 65534 },
+    { "iterations", &G.slic_iterations, 1, 100 },
+    { "sample_stride", &G.slic_sample_stride, 1, 16 },
+    { "compactness", &G.slic_compactness, 1, 100 }
+};
+
+static slic_param_t *find_slic_parameter(const char *name) {
+    for (size_t i = 0; i < sizeof(slic_parameters) / sizeof(slic_parameters[0]); i++)
+        if (!strcmp(slic_parameters[i].name, name)) return &slic_parameters[i];
+    return NULL;
+}
+
+static void parse_slic_options(const char *arg) {
+    if (!*arg) {
+        if (G.slic_params_action != SLIC_PARAMS_NONE || G.slic_params_set) {
+            fprintf(stderr, "SLIC parameter reporting cannot be combined with other -a options\n");
+            exit(1);
+        }
+        G.slic_params_action = SLIC_PARAMS_LIST;
+        return;
+    }
+
+    char *copy = strdup(arg);
+    if (!copy) { perror("SLIC parameters"); exit(1); }
+    if (copy[0] == '@' || !strchr(copy, '=')) {
+        if (G.slic_params_action != SLIC_PARAMS_NONE || G.slic_params_set) {
+            fprintf(stderr, "SLIC parameter reporting cannot be combined with other -a options\n");
+            exit(1);
+        }
+        int range = copy[0] == '@';
+        const char *name = range ? copy + 1 : copy;
+        slic_param_t *parameter = find_slic_parameter(name);
+        if (!parameter) {
+            fprintf(stderr, "unknown SLIC parameter: %s\n", name);
+            free(copy);
+            exit(1);
+        }
+        G.slic_params_action = range ? SLIC_PARAMS_RANGE : SLIC_PARAMS_GET;
+        G.slic_param_query = parameter->name;
+        free(copy);
+        return;
+    }
+    if (G.slic_params_action != SLIC_PARAMS_NONE) {
+        fprintf(stderr, "SLIC parameter assignments cannot be combined with reporting\n");
+        free(copy);
+        exit(1);
+    }
+
+    char *token = copy;
+    for (;;) {
+        char *comma = strchr(token, ',');
+        if (comma) *comma = '\0';
+        char *equals = strchr(token, '=');
+        if (!equals || equals == token || !equals[1]) {
+            fprintf(stderr, "invalid SLIC parameter assignment: %s (expected NAME=INTEGER)\n",
+                    token);
+            free(copy);
+            exit(1);
+        }
+        *equals = '\0';
+        slic_param_t *parameter = find_slic_parameter(token);
+        if (!parameter) {
+            fprintf(stderr, "unknown SLIC parameter: %s\n", token);
+            free(copy);
+            exit(1);
+        }
+        errno = 0;
+        char *end;
+        long value = strtol(equals + 1, &end, 10);
+        if (!*(equals + 1) || *end || errno == ERANGE ||
+            value < parameter->minimum || value > parameter->maximum) {
+            fprintf(stderr, "invalid SLIC parameter %s: %s (expected %d..%d)\n",
+                    parameter->name, equals + 1, parameter->minimum, parameter->maximum);
+            free(copy);
+            exit(1);
+        }
+        *parameter->value = (int)value;
+        G.slic_params_set = 1;
+        if (!comma) break;
+        token = comma + 1;
+        if (!*token) {
+            fprintf(stderr, "invalid empty SLIC parameter assignment\n");
+            free(copy);
+            exit(1);
+        }
+    }
+    free(copy);
+}
+
+void config_print_slic_params(void) {
+    if (G.slic_params_action == SLIC_PARAMS_LIST) {
+        for (size_t i = 0; i < sizeof(slic_parameters) / sizeof(slic_parameters[0]); i++)
+            printf("%s=%d [%d..%d]\n", slic_parameters[i].name, *slic_parameters[i].value,
+                   slic_parameters[i].minimum, slic_parameters[i].maximum);
+        return;
+    }
+    slic_param_t *parameter = find_slic_parameter(G.slic_param_query);
+    if (G.slic_params_action == SLIC_PARAMS_RANGE)
+        printf("%d..%d\n", parameter->minimum, parameter->maximum);
+    else
+        printf("%d\n", *parameter->value);
+}
+
 void config_parse_args(int argc, char **argv) {
-    /* GNU getopt supports optional arguments only when attached; normalize -p
-     * so the documented "-p NAME" form and bare "-p" are both accepted. */
+    /* Determine the selected visualizer first so its ignored options stay
+     * ignored regardless of their position relative to -V. */
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-V") && i + 1 < argc)
+            G.visualizer = argv[i + 1];
+        else if (!strncmp(argv[i], "-V", 2) && argv[i][2])
+            G.visualizer = argv[i] + 2;
+    }
+
+    /* GNU getopt supports required arguments only when attached; normalize -p
+     * and -a so both separated and bare reporting forms are accepted. */
     char **normalized = calloc(2 * (size_t)argc + 1, sizeof(*normalized));
     if (!normalized) { perror("arguments"); exit(1); }
     int normalized_argc = 1;
@@ -244,39 +365,62 @@ void config_parse_args(int argc, char **argv) {
             else
                 normalized[normalized_argc++] = "";
         }
+        if (strcmp(argv[i], "-a") == 0) {
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                normalized[normalized_argc++] = argv[++i];
+            else
+                normalized[normalized_argc++] = "";
+        }
     }
     normalized[normalized_argc] = NULL;
     optind = 1;
+    char **visualizer_options = calloc((size_t)argc, sizeof(*visualizer_options));
+    if (!visualizer_options) { perror("visualizer options"); exit(1); }
+    int visualizer_option_count = 0;
     int o;
     while ((o = getopt(normalized_argc, normalized, "v:d:s:c:o:t:f:r:F:gp:mV:a:")) != -1) switch (o) {
         case 'v': G.vdev = optarg; break;
         case 'd': G.ddev = optarg; break;
         case 's': parse_wh(optarg, &G.capw, &G.caph); break;
-        case 'c': parse_wh(optarg, &G.cw, &G.ch); break;
+        case 'c':
+            if (strcmp(G.visualizer, "slic")) parse_wh(optarg, &G.cw, &G.ch);
+            break;
         case 'o': parse_wh(optarg, &G.outw, &G.outh); break;
         case 't': G.nworkers = atoi(optarg); break;
-        case 'f': G.font_path = optarg; break;
-        case 'r': parse_codepoint_ranges_arg(optarg); break;
+        case 'f':
+            if (strcmp(G.visualizer, "slic")) G.font_path = optarg;
+            break;
+        case 'r':
+            if (strcmp(G.visualizer, "slic")) parse_codepoint_ranges_arg(optarg);
+            break;
         case 'F': G.focus_value = atoi(optarg); break;
         case 'p': parse_camera_params_arg(optarg); break;
         case 'g':
-            if (optind < normalized_argc &&
-                parse_bichrome_colors(normalized[optind], &G.bichrome_fg, &G.bichrome_bg) == 0) {
-                G.bichrome = 1;
-                optind++;
+            if (!strcmp(G.visualizer, "slic")) {
+                uint32_t fg, bg;
+                if (optind < normalized_argc &&
+                    parse_bichrome_colors(normalized[optind], &fg, &bg) == 0)
+                    optind++;
             } else {
-                G.gray = 1;
+                if (optind < normalized_argc &&
+                    parse_bichrome_colors(normalized[optind], &G.bichrome_fg, &G.bichrome_bg) == 0) {
+                    G.bichrome = 1;
+                    optind++;
+                } else {
+                    G.gray = 1;
+                }
             }
             break;
         case 'm': G.hflip = 0; break;
         case 'V':
-            if (strcmp(optarg, "glyph") && strcmp(optarg, "delaunay")) {
-                fprintf(stderr, "unknown visualizer: %s (expected glyph or delaunay)\n", optarg);
+            if (strcmp(optarg, "glyph") && strcmp(optarg, "delaunay") &&
+                strcmp(optarg, "slic")) {
+                fprintf(stderr, "unknown visualizer: %s (expected glyph, delaunay, or slic)\n", optarg);
                 exit(1);
             }
             G.visualizer = optarg;
             break;
-        case 'a': parse_delaunay_options(optarg); break;
+        case 'a': visualizer_options[visualizer_option_count++] = optarg; break;
         default:
             fprintf(stderr, "usage: %s [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] "
                     "[-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] "
@@ -284,12 +428,26 @@ void config_parse_args(int argc, char **argv) {
                     "autofocus; omit for autofocus)] [-g [FGHEX:BGHEX] (luminosity, or bichrome "
                     "e.g. -g 11ee11:1111ee)] [-m (disable mirror, default mirrored)] "
                     "[-p [PARAM_NAME|@PARAM_NAME|PARAM_NAME=value[,PARAM_NAME=value...]]] "
-                    "[-V glyph|delaunay] [-a POINTS[,EDGE_WEIGHT[,SEED]]]\n"
+                    "[-V glyph|delaunay|slic] "
+                    "[-a POINTS[,EDGE_WEIGHT[,SEED]]|SLIC_PARAMETER[=VALUE]]\n"
                     "  RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation\n",
                     argv[0]);
             exit(1);
     }
     free(normalized);
+    for (int i = 0; i < visualizer_option_count; i++) {
+        if (!strcmp(G.visualizer, "slic"))
+            parse_slic_options(visualizer_options[i]);
+        else
+            parse_delaunay_options(visualizer_options[i]);
+    }
+    free(visualizer_options);
+    if ((G.slic_params_action != SLIC_PARAMS_NONE &&
+         (G.camera_params_action != CAMERA_PARAMS_NONE || G.camera_param_count)) ||
+        (G.camera_params_action != CAMERA_PARAMS_NONE && G.slic_params_set)) {
+        fprintf(stderr, "camera and SLIC parameter reporting/actions cannot be combined\n");
+        exit(1);
+    }
     if (!strcmp(G.visualizer, "delaunay")) {
         /* These options belong to glyph rendering and do not control the
          * Delaunay analyzer's fixed, camera-relative sampling grid. */
@@ -303,6 +461,19 @@ void config_parse_args(int argc, char **argv) {
 }
 
 void config_derive_grid(void) {
+    if (!strcmp(G.visualizer, "slic")) {
+        G.denom = 1;
+        G.scw = G.sch = 1;
+        G.gw = G.capw;
+        G.gh = G.caph;
+        if (G.gw < 1 || G.gh < 1 ||
+            (int64_t)G.gw * G.gh > INT_MAX ||
+            G.slic_cluster_count > (int64_t)G.gw * G.gh) {
+            fprintf(stderr, "SLIC image dimensions or cluster count are out of range\n");
+            exit(1);
+        }
+        return;
+    }
     G.denom = 1;
     for (int d = 8; d >= 1; d /= 2) if (G.cw % d == 0 && G.ch % d == 0) { G.denom = d; break; }
     G.scw = G.cw / G.denom; G.sch = G.ch / G.denom;
