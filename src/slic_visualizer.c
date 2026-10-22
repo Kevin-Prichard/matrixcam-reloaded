@@ -85,6 +85,10 @@ static void stop_render_workers(void) {
 }
 
 static int visualizer_init(int grid_width, int grid_height, int out_width, int out_height) {
+    if (grid_width < 1 || grid_height < 1 || out_width < 1 || out_height < 1) {
+        fprintf(stderr, "invalid SLIC visualizer dimensions\n");
+        return -1;
+    }
     source_width = grid_width;
     output_width = out_width;
     output_height = out_height;
@@ -108,8 +112,16 @@ static int visualizer_init(int grid_width, int grid_height, int out_width, int o
 
     long online_cores = sysconf(_SC_NPROCESSORS_ONLN);
     if (online_cores < 1) online_cores = 1;
-    render_worker_count = online_cores < output_height ? (int)online_cores : output_height;
-    render_workers = calloc((size_t)render_worker_count, sizeof(*render_workers));
+    size_t worker_count = (size_t)(online_cores < output_height ? online_cores : output_height);
+    if (worker_count > SIZE_MAX / sizeof(*render_workers)) {
+        fprintf(stderr, "too many SLIC render workers\n");
+        free(xmap);
+        free(ymap);
+        xmap = ymap = NULL;
+        return -1;
+    }
+    render_worker_count = (int)worker_count;
+    render_workers = calloc(worker_count, sizeof(*render_workers));
     if (!render_workers) {
         perror("SLIC render workers");
         free(xmap);

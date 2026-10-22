@@ -6,7 +6,7 @@ LDLIBS  := $(shell pkg-config --libs $(PKGS)) -ljpeg -lm
 CXX     ?= g++
 CXXFLAGS ?= -O3 -march=native -pthread -Wall -Wextra -Werror
 CXXFLAGS += -std=c++11 $(shell pkg-config --cflags $(PKGS))
-FAST_SLIC_DIR := candidate-dependencies/fast-slic
+FAST_SLIC_DIR := ../fast-slic
 FAST_SLIC_SRC := $(addprefix $(FAST_SLIC_DIR)/src/,timer.cpp parallel.cpp fast-slic.cpp cca.cpp context.cpp context-impl.cpp lsc.cpp lsc-builder.cpp)
 FAST_SLIC_ARCH_FLAGS := $(shell printf '' | $(CXX) $(CXXFLAGS) -dM -E -x c++ - 2>/dev/null | \
 	awk '$$2 == "__AVX2__" { print "-DUSE_AVX2" } \
