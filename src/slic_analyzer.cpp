@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <exception>
 #include <memory>
 #include <vector>
@@ -23,7 +24,17 @@ struct slic_jpeg_error {
     jmp_buf jump;
 };
 
+static double now_ms(void) {
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6;
+}
+
 struct slic_context {
+    double t_decode = 0, t_init = 0, t_iter = 0, t_out = 0;
+    int frames = 0;
+    bool timing = false;
+    std::vector<slic_pixel_t> averages;
     jpeg_decompress_struct decoder;
     slic_jpeg_error error;
     bool decoder_created;
@@ -64,6 +75,8 @@ static void *create_context(void) {
         context->assignments.resize(pixel_count);
         context->palette.resize((size_t)G.slic_cluster_count);
 
+        context->timing = getenv("SLIC_TIMING") != NULL;
+        context->averages.resize((size_t)G.slic_cluster_count);
         fslic::ContextBuilder builder;
 #if defined(USE_AVX2)
         builder.set_arch("x64/avx2");
@@ -82,7 +95,17 @@ static void *create_context(void) {
             destroy_context(context);
             return NULL;
         }
-        context->slic->num_threads = 1;
+        context->slic->num_threads = 4;
+        if (context->timing)
+            fprintf(stderr, "slic arch=%s\n",
+#if defined(USE_AVX2)
+                    "x64/avx2"
+#elif defined(USE_NEON)
+                    "arm/neon"
+#else
+                    "scalar"
+#endif
+            );
         context->slic->compactness = (float)G.slic_compactness;
         context->slic->min_size_factor = 0.1f;
         context->slic->subsample_stride_config = (int16_t)G.slic_sample_stride;
@@ -151,9 +174,13 @@ static int analyze(void *opaque, const uint8_t *data, size_t length, void *out) 
     const int width = G.gw, height = G.gh, clusters_count = G.slic_cluster_count;
     const size_t pixel_count = (size_t)width * height;
     try {
+        double t0 = now_ms();
         if (decode_rgb(context, data, length, context->rgb.data()) < 0) return -1;
+        double t1 = now_ms();
         context->slic->initialize_clusters();
+        double t2 = now_ms();
         context->slic->iterate(context->assignments.data(), G.slic_iterations);
+        double t3 = now_ms();
         std::fill(context->palette.begin(), context->palette.end(), color_sum{0, 0, 0, 0});
         for (size_t i = 0; i < pixel_count; i++) {
             uint16_t label = context->assignments[i];
@@ -167,17 +194,28 @@ static int analyze(void *opaque, const uint8_t *data, size_t length, void *out) 
             sum.blue += context->rgb[i * 3 + 2];
             sum.count++;
         }
-
+        for (int c = 0; c < clusters_count; c++) {
+            const color_sum &sum = context->palette[c];
+            uint64_t n = sum.count ? sum.count : 1;
+            context->averages[c] = {(uint16_t)c, (uint8_t)(sum.red / n),
+                                    (uint8_t)(sum.green / n), (uint8_t)(sum.blue / n)};
+        }
         slic_pixel_t *pixels = static_cast<slic_pixel_t *>(out);
-        for (size_t i = 0; i < pixel_count; i++) {
-            uint16_t label = context->assignments[i];
-            const color_sum &sum = context->palette[label];
-            pixels[i] = {
-                label,
-                (uint8_t)(sum.red / sum.count),
-                (uint8_t)(sum.green / sum.count),
-                (uint8_t)(sum.blue / sum.count)
-            };
+        for (size_t i = 0; i < pixel_count; i++)
+            pixels[i] = context->averages[context->assignments[i]];
+        if (context->timing) {
+            double t4 = now_ms();
+            context->t_decode += t1 - t0;
+            context->t_init += t2 - t1;
+            context->t_iter += t3 - t2;
+            context->t_out += t4 - t3;
+            if (++context->frames == 20) {
+                fprintf(stderr, "slic ms/frame: decode %.1f init %.1f iterate %.1f out %.1f\n",
+                        context->t_decode / 20, context->t_init / 20,
+                        context->t_iter / 20, context->t_out / 20);
+                context->t_decode = context->t_init = context->t_iter = context->t_out = 0;
+                context->frames = 0;
+            }
         }
     } catch (const std::exception &error) {
         fprintf(stderr, "fast-slic failed: %s\n", error.what());
