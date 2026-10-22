@@ -53,7 +53,7 @@ fast-slic C++ implementation from `candidate-dependencies/fast-slic`; each
 pipeline worker segments frames while separate render workers scale and draw
 the superpixels. SLIC ignores `-c`, `-f`, `-r`, and `-g`, and accepts these
 `-a` parameters (defaults: `clusters=400`, `iterations=5`,
-`sample_stride=3`, `compactness=10`):
+`sample_stride=3`, `compactness=10`, `downscale=2`):
 ```
 $ ./cellavg -V slic -a clusters=700,iterations=4,sample_stride=2 -s 640x480 -o 1280x720
 $ ./cellavg -V slic -a
@@ -61,7 +61,9 @@ $ ./cellavg -V slic -a clusters
 $ ./cellavg -V slic -a @clusters
 ```
 Parameter bounds are `clusters=16..65534`, `iterations=1..100`,
-`sample_stride=1..16`, and `compactness=1..100`. The requested cluster count
+`sample_stride=1..16`, `compactness=1..100`, and `downscale` of 1, 2, 4, or 8 (the JPEG is decoded
+at 1/N size and segmented at that resolution, which is much faster on small
+boards). The requested cluster count
 must also fit within the actual captured frame. `-d`, `-F`, `-p`, `-s`, and
 `-o` retain their usual device, focus, camera-control, capture-size, and
 output-size meanings.

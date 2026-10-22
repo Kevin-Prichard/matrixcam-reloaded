@@ -40,6 +40,7 @@ typedef struct {
     int slic_iterations;
     int slic_sample_stride;
     int slic_compactness;
+    int slic_downscale;
     int slic_params_set;
     slic_params_action_t slic_params_action;
     const char *slic_param_query;

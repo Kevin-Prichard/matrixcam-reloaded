@@ -57,6 +57,7 @@ int main(void) {
     G.slic_iterations = 3;
     G.slic_sample_stride = 2;
     G.slic_compactness = 10;
+    G.slic_downscale = 1;
     G.hflip = 0;
 
     std::vector<uint8_t> frame = make_test_frame(G.gw, G.gh);

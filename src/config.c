@@ -17,7 +17,7 @@ config_t G = {
     .outw = 1280, .outh = 720, .nworkers = 3, .hflip = 1, .focus_value = -1,
     .delaunay_point_count = 600, .delaunay_edge_weight = 1.0, .delaunay_seed = 1,
     .slic_cluster_count = 400, .slic_iterations = 5, .slic_sample_stride = 3,
-    .slic_compactness = 10
+    .slic_compactness = 10, .slic_downscale = 2
 };
 
 static void parse_wh(const char *s, int *w, int *h) { sscanf(s, "%dx%d", w, h); }
@@ -241,7 +241,8 @@ static slic_param_t slic_parameters[] = {
     { "clusters", &G.slic_cluster_count, 16, 65534 },
     { "iterations", &G.slic_iterations, 1, 100 },
     { "sample_stride", &G.slic_sample_stride, 1, 16 },
-    { "compactness", &G.slic_compactness, 1, 100 }
+    { "compactness", &G.slic_compactness, 1, 100 },
+    { "downscale", &G.slic_downscale, 1, 8 }
 };
 
 static slic_param_t *find_slic_parameter(const char *name) {
@@ -462,10 +463,15 @@ void config_parse_args(int argc, char **argv) {
 
 void config_derive_grid(void) {
     if (!strcmp(G.visualizer, "slic")) {
-        G.denom = 1;
+        if (G.slic_downscale != 1 && G.slic_downscale != 2 &&
+            G.slic_downscale != 4 && G.slic_downscale != 8) {
+            fprintf(stderr, "SLIC downscale must be 1, 2, 4, or 8\n");
+            exit(1);
+        }
+        G.denom = G.slic_downscale;
         G.scw = G.sch = 1;
-        G.gw = G.capw;
-        G.gh = G.caph;
+        G.gw = (G.capw + G.denom - 1) / G.denom;
+        G.gh = (G.caph + G.denom - 1) / G.denom;
         if (G.gw < 1 || G.gh < 1 ||
             (int64_t)G.gw * G.gh > INT_MAX ||
             G.slic_cluster_count > (int64_t)G.gw * G.gh) {

@@ -135,7 +135,7 @@ static int decode_rgb(slic_context *context, const uint8_t *data, size_t length,
     jpeg_mem_src(decoder, data, length);
     jpeg_read_header(decoder, TRUE);
     decoder->scale_num = 1;
-    decoder->scale_denom = 1;
+    decoder->scale_denom = (unsigned)G.slic_downscale;
     decoder->out_color_space = JCS_RGB;
     decoder->dct_method = JDCT_IFAST;
     decoder->do_fancy_upsampling = FALSE;
