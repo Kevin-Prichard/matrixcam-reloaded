@@ -215,6 +215,7 @@ static int analyze(void *opaque, const uint8_t *data, size_t length, void *out) 
                         context->t_iter / 20, context->t_out / 20);
                 context->t_decode = context->t_init = context->t_iter = context->t_out = 0;
                 context->frames = 0;
+                fprintf(stderr, "slic stages: %s\n", context->slic->get_timing_report().c_str());
             }
         }
     } catch (const std::exception &error) {
