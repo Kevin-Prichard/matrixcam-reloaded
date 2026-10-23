@@ -267,11 +267,17 @@ static int visualizer_init(int grid_width, int grid_height,
 
 static void visualizer_render(const void *cells, uint8_t *fb_map, uint32_t fb_pitch) {
     const joydiv_result_header_t *header = cells;
+    if (!header) { fprintf(stderr, "joydiv_vis: null cells\n"); return; }
     if (header->magic != JOYDIV_RESULT_MAGIC ||
         header->frame_width != output_width ||
         header->frame_height != output_height ||
         header->zone_count < 1 ||
-        header->grouprows < 1) return;
+        header->grouprows < 1) {
+        fprintf(stderr, "joydiv_vis: bad header magic=%08x fw=%d fh=%d out=%dx%d z=%d g=%d\n",
+                header->magic, header->frame_width, header->frame_height,
+                output_width, output_height, header->zone_count, header->grouprows);
+        return;
+    }
 
     static int vdiag = 0;
     if (vdiag < 5) {
@@ -284,20 +290,24 @@ static void visualizer_render(const void *cells, uint8_t *fb_map, uint32_t fb_pi
         const uint8_t *frame = (const uint8_t *)cells + header->frame_offset;
         for (int y = 0; y < output_height; y++) {
             uint32_t *row = (uint32_t *)(fb_map + (size_t)y * fb_pitch);
-            for (int x = 0; x < output_width; x++) {
-                int source_x = G.hflip ? output_width - 1 - x : x;
-                const uint8_t *pixel =
-                    frame + ((size_t)y * (size_t)output_width + (size_t)source_x) * 3;
-                /* write in order */
-                uint32_t val = (uint32_t)pixel[0] << 16 | (uint32_t)pixel[1] << 8 | (uint32_t)pixel[2];
-                row[x] = val;
+            if (G.hflip) {
+                for (int x = 0; x < output_width; x++) {
+                    const uint8_t *src = frame + (size_t)y * (size_t)output_width * 3 + (size_t)(output_width - 1 - x) * 3;
+                    row[x] = (uint32_t)src[0] << 16 | (uint32_t)src[1] << 8 | (uint32_t)src[2];
+                }
+            } else {
+                for (int x = 0; x < output_width; x++) {
+                    const uint8_t *src = frame + (size_t)y * (size_t)output_width * 3 + (size_t)x * 3;
+                    row[x] = (uint32_t)src[0] << 16 | (uint32_t)src[1] << 8 | (uint32_t)src[2];
+                }
             }
         }
     } else {
         for (int y = 0; y < output_height; y++) {
             uint32_t *row = (uint32_t *)(fb_map + (size_t)y * fb_pitch);
+            uint32_t c = G.joydiv_background_color;
             for (int x = 0; x < output_width; x++)
-                row[x] = G.joydiv_background_color;
+                row[x] = c;
         }
     }
 

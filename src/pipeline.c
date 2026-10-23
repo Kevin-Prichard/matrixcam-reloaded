@@ -68,7 +68,7 @@ static void *worker_main(void *arg) {
             }
         } else {
             st.bad++;
-            fprintf(stderr, "pipeline: analyzer %s failed on seq %llu\n", active_analyzer->name, (unsigned long long)s->seq);
+                fprintf(stderr, "pipeline: analyzer %s failed on seq %llu\n", active_analyzer->name, (unsigned long long)s->seq);
         }
         s->state = S_FREE;
         pthread_mutex_unlock(&mu);

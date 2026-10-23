@@ -68,6 +68,7 @@ static int v4l2_configure(void) {
         close(vfd); vfd = -1;
         return -1;
     }
+    fprintf(stderr, "capture: negotiated %dx%d\n", f.fmt.pix.width, f.fmt.pix.height);
     G.capw = f.fmt.pix.width; G.caph = f.fmt.pix.height;
     for (int i = 0; i < G.camera_param_count; i++) {
         if (camera_controls_validate(vfd, G.camera_params[i].name,

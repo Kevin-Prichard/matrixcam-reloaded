@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
     if (glyph_ready) glyph_atlas_init();
     display_init();
     const drmModeModeInfo *mode = display_mode();
+    fprintf(stderr, "main: display mode %dx%d\n", mode->hdisplay, mode->vdisplay);
     if (joydiv_ready && joydiv_analyzer_configure(mode->hdisplay, mode->vdisplay) < 0) {
         display_shutdown();
         capture_shutdown();
@@ -113,13 +114,16 @@ int main(int argc, char **argv) {
     while (running) {
         uint64_t seq = pipeline_wait_latest(local, shown_seq);
         int fresh = seq != shown_seq;
-        if (fresh) shown_seq = seq;
+        if (fresh) {
+            static int mdiag = 0;
+            if (mdiag < 10) { fprintf(stderr, "main: fresh frame seq=%llu\n", (unsigned long long)seq); mdiag++; }
+            shown_seq = seq;
+        }
 
         if (fresh) {
             int back = 1 - front;
             display_buffer_t *buf = display_buffer(back);
-            /* clear full buffer size */
-            memset(buf->map, 0, (size_t)mode->hdisplay * buf->pitch);
+            /* clear to avoid artifacts */
             vis->render(local, buf->map, buf->pitch);
             if (display_present(back) == 0) {
                 front = back;

@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <string.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -72,7 +73,7 @@ void display_init(void) {
     if (drmModeSetCrtc(dfd, crtc_id, bufs[0].fb, 0, 0, &conn_id, 1, &mode)) {
         perror("SetCrtc (are you DRM master? run from a text console)"); exit(1);
     }
-    printf("display %ux%u pitch=%u\n", mode.hdisplay, mode.vdisplay, bufs[0].pitch);
+    printf("display %ux%u pitch=%u size=%zu\n", mode.hdisplay, mode.vdisplay, bufs[0].pitch, bufs[0].size);
 }
 
 const drmModeModeInfo *display_mode(void) { return &mode; }
@@ -82,15 +83,10 @@ display_buffer_t *display_buffer(int index) { return &bufs[index]; }
 int display_present(int index) {
     int pending = 1;
     drmEventContext ev = { .version = 2, .page_flip_handler = on_flip };
-    fprintf(stderr, "disp_flip: req index=%d fb=%u crtc=%u\n", index, bufs[index].fb, crtc_id);
-    /* ensure CPU writes reach memory */
-    if (bufs[index].map && bufs[index].size) {
-        /* simple touch */
-        volatile uint32_t *p = (volatile uint32_t *)bufs[index].map;
-        (void)p[0];
-    }
+    /* ensure dirty */
+    /* skip dirtyfb */
     if (drmModePageFlip(dfd, crtc_id, bufs[index].fb, DRM_MODE_PAGE_FLIP_EVENT, &pending) != 0) {
-        fprintf(stderr, "disp_flip: drmModePageFlip failed index=%d\n", index);
+        fprintf(stderr, "disp_flip: drmModePageFlip failed index=%d: %s\n", index, strerror(errno));
         return -1;
     }
     while (pending && running) {
@@ -98,14 +94,14 @@ int display_present(int index) {
         int pr = poll(&p, 1, 1000);
         if (pr > 0) {
             if (drmHandleEvent(dfd, &ev) < 0) {
-                fprintf(stderr, "disp_flip: drmHandleEvent failed index=%d pending=%d\n", index, pending);
+                fprintf(stderr, "disp_flip: drmHandleEvent failed index=%d\n", index);
                 break;
             }
         } else if (pr == 0) {
-            fprintf(stderr, "disp_flip: timeout index=%d pending=%d\n", index, pending);
+            fprintf(stderr, "disp_flip: timeout index=%d\n", index);
             break;
         } else {
-            fprintf(stderr, "disp_flip: poll error index=%d errno=%d\n", index, errno);
+            fprintf(stderr, "disp_flip: poll error index=%d: %s\n", index, strerror(errno));
             break;
         }
     }
@@ -113,7 +109,6 @@ int display_present(int index) {
         fprintf(stderr, "disp_flip: not completed index=%d\n", index);
         return -1;
     }
-    fprintf(stderr, "disp_flip: done index=%d\n", index);
     return 0;
 }
 
