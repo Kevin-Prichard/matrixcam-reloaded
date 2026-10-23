@@ -119,8 +119,12 @@ int main(int argc, char **argv) {
             int back = 1 - front;
             display_buffer_t *buf = display_buffer(back);
             vis->render(local, buf->map, buf->pitch);
-            if (display_present(back) == 0) front = back;
-            pipeline_note_shown();
+            if (display_present(back) == 0) {
+                front = back;
+                pipeline_note_shown();
+            } else {
+                fprintf(stderr, "main: display_present failed for back=%d, skipping swap (front=%d)\n", back, front);
+            }
         }
 
         uint64_t now = now_us();

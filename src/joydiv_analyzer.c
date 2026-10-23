@@ -230,42 +230,55 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
         return -1;
     }
 
-    memcpy(out, &layout, sizeof(layout));
-    memcpy(out + layout.zone_offset, layout_zones,
-           (size_t)layout.zone_count * sizeof(*layout_zones));
-    uint8_t *frame = out + layout.frame_offset;
-    for (int i = 0; i < layout.zone_count; i++) {
-        size_t stride = (size_t)layout_zones[i].w * (size_t)layout_zones[i].channel_count;
-        memset(ctx->zone_sums[i], 0, stride * sizeof(*ctx->zone_sums[i]));
-        ctx->zone_group[i] = -1;
-        ctx->zone_rows[i] = 0;
-    }
-
-    for (int y = 0; y < G.caph; y++) {
-        JSAMPROW row = ctx->rowbuf;
-        if (jpeg_read_scanlines(&ctx->ci, &row, 1) != 1) {
-            jpeg_abort_decompress(&ctx->ci);
-            return -1;
+        memcpy(out, &layout, sizeof(layout));
+        memcpy(out + layout.zone_offset, layout_zones,
+               (size_t)layout.zone_count * sizeof(*layout_zones));
+        uint8_t *frame = out + layout.frame_offset;
+        for (int i = 0; i < layout.zone_count; i++) {
+            size_t stride = (size_t)layout_zones[i].w * (size_t)layout_zones[i].channel_count;
+            memset(ctx->zone_sums[i], 0, stride * sizeof(*ctx->zone_sums[i]));
+            ctx->zone_group[i] = -1;
+            ctx->zone_rows[i] = 0;
         }
+        memset(frame, 0, (size_t)display_width * (size_t)display_height * 3);
 
-        int first_display_row =
-            (int)(((int64_t)y * display_height + G.caph - 1) / G.caph);
-        int end_display_row =
-            (int)(((int64_t)(y + 1) * display_height + G.caph - 1) / G.caph);
-        if (first_display_row < end_display_row) {
-            for (int x = 0; x < display_width; x++) {
-                int source_x = ctx->xmap[x];
-                const uint8_t *pixel = ctx->rowbuf + (size_t)source_x * 3;
-                ctx->disprow[(size_t)x * 3] = pixel[0];
-                ctx->disprow[(size_t)x * 3 + 1] = pixel[1];
-                ctx->disprow[(size_t)x * 3 + 2] = pixel[2];
+        static int diag_frame = 0;
+        int rows_written = 0;
+        for (int y = 0; y < G.caph; y++) {
+            JSAMPROW row = ctx->rowbuf;
+            if (jpeg_read_scanlines(&ctx->ci, &row, 1) != 1) {
+                fprintf(stderr, "joydiv_analyzer: jpeg_read_scanlines failed at y=%d\n", y);
+                jpeg_abort_decompress(&ctx->ci);
+                return -1;
             }
-            for (int display_y = first_display_row; display_y < end_display_row;
-                 display_y++) {
-                memcpy(frame + (size_t)display_y * (size_t)display_width * 3,
-                       ctx->disprow, (size_t)display_width * 3);
+
+            int first_display_row =
+                (int)(((int64_t)y * display_height + G.caph - 1) / G.caph);
+            int end_display_row =
+                (int)(((int64_t)(y + 1) * display_height + G.caph - 1) / G.caph);
+            if (end_display_row > display_height) end_display_row = display_height;
+            if (first_display_row < 0) first_display_row = 0;
+            if (first_display_row < end_display_row) {
+                for (int x = 0; x < display_width; x++) {
+                    int source_x = ctx->xmap[x];
+                    const uint8_t *pixel = ctx->rowbuf + (size_t)source_x * 3;
+                    ctx->disprow[(size_t)x * 3] = pixel[0];
+                    ctx->disprow[(size_t)x * 3 + 1] = pixel[1];
+                    ctx->disprow[(size_t)x * 3 + 2] = pixel[2];
+                }
+                for (int display_y = first_display_row; display_y < end_display_row;
+                     display_y++) {
+                    memcpy(frame + (size_t)display_y * (size_t)display_width * 3,
+                           ctx->disprow, (size_t)display_width * 3);
+                    rows_written++;
+                }
+                if (diag_frame < 3 && y == 0) {
+                    fprintf(stderr, "joydiv_diag: cap %dx%d -> disp %dx%d first=%d end=%d\n",
+                            G.capw, G.caph, display_width, display_height, first_display_row, end_display_row);
+                }
+            } else if (diag_frame < 5) {
+                fprintf(stderr, "joydiv_diag: y=%d bad map first=%d end=%d\n", y, first_display_row, end_display_row);
             }
-        }
 
         for (int zone_index = 0; zone_index < layout.zone_count; zone_index++) {
             const joydiv_zone_result_t *zone = &layout_zones[zone_index];
@@ -299,6 +312,15 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
     for (int i = 0; i < layout.zone_count; i++)
         finalize_group(ctx, i, out);
     jpeg_abort_decompress(&ctx->ci);
+    diag_frame++;
+    if (diag_frame % 30 == 0) {
+        fprintf(stderr, "joydiv_analyzer_diag: frame=%d filled=%d/%d display rows\n",
+                diag_frame, rows_written, display_height);
+    }
+    if (rows_written != display_height) {
+        fprintf(stderr, "joydiv_analyzer_diag: INCOMPLETE frame=%d filled=%d/%d\n",
+                diag_frame, rows_written, display_height);
+    }
     return 0;
 }
 

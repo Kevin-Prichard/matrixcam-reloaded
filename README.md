@@ -167,3 +167,15 @@ $ sudo ./cellavg -s 320x240 -o 1920x1080 -V delaunay -a 300,50,654364 -p contras
 ```bash
 $ sudo ./cellavg -s 320x240 -o 1920x1080 -V delaunay -a 1000,100,653422364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
 ```
+12. Joy Division at mid res and RGB bands, ~20 fps
+```bash
+$ sudo ./cellavg -V joydiv -s 1280x720 -o 640x480   -a zone=0.0+1280.720 -a grouprows=32 -a yvalue=color   -a lines=straight -a b=8 -a background=video -a alpha=255
+```
+13. Joy Division at mid res and luminance bands, ~20 fps
+```bash
+$ sudo ./cellavg -V joydiv -s 1280x720 -o 640x480   -a zone=0.0+1280.720 -a grouprows=32 -a yvalue=lum   -a lines=straight -a b=8 -a background=video -a alpha=255
+```
+14. More liike Joy Division album cover, tighter lines and purely monochrome
+15. ```bash
+$ sudo ./cellavg -V joydiv -s 1280x720 -o 640x480   -a zone=0.0+1280.720 -a grouprows=8 -a yvalue=lum   -a lines=straight -a b=64 -a background=black -a alpha=255
+```

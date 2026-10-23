@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/mman.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -30,18 +31,18 @@ void display_init(void) {
         if (c && c->connection == DRM_MODE_CONNECTED && c->count_modes > 0) { conn = c; break; }
         drmModeFreeConnector(c);
     }
-    if (!conn) { fprintf(stderr, "no connected display on %s\n", G.ddev); exit(1); }
+    if (!conn) { fprintf(stderr, "no connected display on %s\n", G.ddev); if (res) drmModeFreeResources(res); close(dfd); exit(1); }
     conn_id = conn->connector_id;
 
     int pick = -1;
     for (int i = 0; i < conn->count_modes; i++)
         if (conn->modes[i].hdisplay == G.outw && conn->modes[i].vdisplay == G.outh) { pick = i; break; }
     if (pick < 0) {
-        pick = 0;
-        for (int i = 0; i < conn->count_modes; i++)
-            if (conn->modes[i].type & DRM_MODE_TYPE_PREFERRED) { pick = i; break; }
-        fprintf(stderr, "requested %dx%d not offered, using %dx%d\n", G.outw, G.outh,
-                conn->modes[pick].hdisplay, conn->modes[pick].vdisplay);
+        fprintf(stderr, "requested %dx%d not offered on %s\n", G.outw, G.outh, G.ddev);
+        drmModeFreeConnector(conn);
+        drmModeFreeResources(res);
+        close(dfd);
+        exit(1);
     }
     mode = conn->modes[pick];
 
@@ -81,12 +82,32 @@ display_buffer_t *display_buffer(int index) { return &bufs[index]; }
 int display_present(int index) {
     int pending = 1;
     drmEventContext ev = { .version = 2, .page_flip_handler = on_flip };
-    if (drmModePageFlip(dfd, crtc_id, bufs[index].fb, DRM_MODE_PAGE_FLIP_EVENT, &pending) != 0)
+    fprintf(stderr, "disp_flip: req index=%d fb=%u crtc=%u\n", index, bufs[index].fb, crtc_id);
+    if (drmModePageFlip(dfd, crtc_id, bufs[index].fb, DRM_MODE_PAGE_FLIP_EVENT, &pending) != 0) {
+        fprintf(stderr, "disp_flip: drmModePageFlip failed index=%d\n", index);
         return -1;
+    }
     while (pending && running) {
         struct pollfd p = { dfd, POLLIN, 0 };
-        if (poll(&p, 1, 500) > 0) drmHandleEvent(dfd, &ev); else break;
+        int pr = poll(&p, 1, 1000);
+        if (pr > 0) {
+            if (drmHandleEvent(dfd, &ev) < 0) {
+                fprintf(stderr, "disp_flip: drmHandleEvent failed index=%d pending=%d\n", index, pending);
+                break;
+            }
+        } else if (pr == 0) {
+            fprintf(stderr, "disp_flip: timeout index=%d pending=%d\n", index, pending);
+            break;
+        } else {
+            fprintf(stderr, "disp_flip: poll error index=%d errno=%d\n", index, errno);
+            break;
+        }
     }
+    if (pending) {
+        fprintf(stderr, "disp_flip: not completed index=%d\n", index);
+        return -1;
+    }
+    fprintf(stderr, "disp_flip: done index=%d\n", index);
     return 0;
 }
 
