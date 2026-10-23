@@ -17,7 +17,15 @@ config_t G = {
     .outw = 1280, .outh = 720, .nworkers = 3, .hflip = 1, .focus_value = -1,
     .delaunay_point_count = 600, .delaunay_edge_weight = 1.0, .delaunay_seed = 1,
     .slic_cluster_count = 400, .slic_iterations = 5, .slic_sample_stride = 3,
-    .slic_compactness = 10, .slic_downscale = 2
+    .slic_compactness = 10, .slic_downscale = 2,
+    .joydiv_grouprows = 8, .joydiv_alpha = 255,
+    .joydiv_background = JOYDIV_BACKGROUND_COLOR,
+    .joydiv_background_color = 0x000000u,
+    .joydiv_default_yvalue = JOYDIV_YVALUE_LUM,
+    .joydiv_default_lines = JOYDIV_LINES_STRAIGHT,
+    .joydiv_default_b = 0,
+    .joydiv_default_bez_tension = 0.5,
+    .joydiv_default_bez_smooth = 8.0
 };
 
 static void parse_wh(const char *s, int *w, int *h) { sscanf(s, "%dx%d", w, h); }
@@ -328,6 +336,173 @@ static void parse_slic_options(const char *arg) {
     free(copy);
 }
 
+static void joydiv_add_zone(int x, int y, int w, int h) {
+    joydiv_zone_t *grown = realloc(G.joydiv_zones,
+        (G.joydiv_zone_count + 1) * sizeof(*G.joydiv_zones));
+    if (!grown) { perror("joydiv zones"); exit(1); }
+    G.joydiv_zones = grown;
+    joydiv_zone_t *zone = &G.joydiv_zones[G.joydiv_zone_count++];
+    zone->x = x; zone->y = y; zone->w = w; zone->h = h;
+    zone->yvalue = G.joydiv_default_yvalue;
+    zone->lines = G.joydiv_default_lines;
+    zone->b = G.joydiv_default_b;
+    zone->bez_tension = G.joydiv_default_bez_tension;
+    zone->bez_smooth = G.joydiv_default_bez_smooth;
+}
+
+static int parse_hex_color(const char *text, uint32_t *color) {
+    unsigned value;
+    char tail;
+    if (strlen(text) != 6 || sscanf(text, "%6x%c", &value, &tail) != 1) return -1;
+    *color = (uint32_t)value;
+    return 0;
+}
+
+static int parse_joydiv_double(const char *text, double minimum, double maximum,
+                               double *value) {
+    errno = 0;
+    char *end;
+    double parsed = strtod(text, &end);
+    if (!*text || *end || errno == ERANGE || !isfinite(parsed) ||
+        parsed < minimum || parsed > maximum)
+        return -1;
+    *value = parsed;
+    return 0;
+}
+
+static void parse_joydiv_options(const char *arg) {
+    if (!*arg) {
+        fprintf(stderr, "joydiv requires -a key=value options\n");
+        exit(1);
+    }
+    char *copy = strdup(arg);
+    if (!copy) { perror("joydiv options"); exit(1); }
+    char *equals = strchr(copy, '=');
+    if (!equals || equals == copy || !equals[1]) {
+        fprintf(stderr, "invalid joydiv option: %s (expected NAME=VALUE)\n", arg);
+        free(copy);
+        exit(1);
+    }
+    *equals = '\0';
+    const char *key = copy;
+    const char *text = equals + 1;
+
+    if (!strcmp(key, "zone")) {
+        int x, y, w, h, used = 0;
+        if (sscanf(text, "%d.%d+%d.%d%n", &x, &y, &w, &h, &used) != 4 ||
+            text[used] != '\0' || x < 0 || y < 0 || w < 1 || h < 1 ||
+            (int64_t)x + w > INT_MAX || (int64_t)y + h > INT_MAX) {
+            fprintf(stderr, "invalid joydiv zone: %s (expected STARTX.STARTY+WIDTH.HEIGHT)\n",
+                    text);
+            free(copy);
+            exit(1);
+        }
+        joydiv_add_zone(x, y, w, h);
+    } else if (!strcmp(key, "grouprows")) {
+        errno = 0;
+        char *end;
+        long value = strtol(text, &end, 10);
+        if (!*text || *end || errno == ERANGE || value < 1 || value > INT_MAX) {
+            fprintf(stderr, "invalid joydiv grouprows: %s (expected a positive integer)\n",
+                    text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_grouprows = (int)value;
+    } else if (!strcmp(key, "yvalue")) {
+        joydiv_yvalue_t value;
+        if (!strcmp(text, "lum")) value = JOYDIV_YVALUE_LUM;
+        else if (!strcmp(text, "color")) value = JOYDIV_YVALUE_COLOR;
+        else {
+            fprintf(stderr, "invalid joydiv yvalue: %s (expected lum or color)\n", text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_default_yvalue = value;
+        for (int i = 0; i < G.joydiv_zone_count; i++)
+            G.joydiv_zones[i].yvalue = value;
+    } else if (!strcmp(key, "lines")) {
+        joydiv_lines_t value;
+        if (!strcmp(text, "straight")) value = JOYDIV_LINES_STRAIGHT;
+        else if (!strcmp(text, "bezier")) value = JOYDIV_LINES_BEZIER;
+        else {
+            fprintf(stderr, "invalid joydiv lines: %s (expected straight or bezier)\n", text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_default_lines = value;
+        for (int i = 0; i < G.joydiv_zone_count; i++)
+            G.joydiv_zones[i].lines = value;
+    } else if (!strcmp(key, "b")) {
+        errno = 0;
+        char *end;
+        long value = strtol(text, &end, 10);
+        if (!*text || *end || errno == ERANGE || value < 0 || value > INT_MAX) {
+            fprintf(stderr, "invalid joydiv b: %s (expected a non-negative integer)\n", text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_default_b = (int)value;
+        for (int i = 0; i < G.joydiv_zone_count; i++)
+            G.joydiv_zones[i].b = (int)value;
+    } else if (!strcmp(key, "bez-tension")) {
+        double value;
+        if (parse_joydiv_double(text, 0.0, 1.0, &value) < 0) {
+            fprintf(stderr, "invalid joydiv bez-tension: %s (expected 0..1)\n", text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_default_bez_tension = value;
+        for (int i = 0; i < G.joydiv_zone_count; i++)
+            G.joydiv_zones[i].bez_tension = value;
+    } else if (!strcmp(key, "bez-smooth")) {
+        double value;
+        if (parse_joydiv_double(text, 1.0, 64.0, &value) < 0) {
+            fprintf(stderr, "invalid joydiv bez-smooth: %s (expected 1..64)\n", text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_default_bez_smooth = value;
+        for (int i = 0; i < G.joydiv_zone_count; i++)
+            G.joydiv_zones[i].bez_smooth = value;
+    } else if (!strcmp(key, "background")) {
+        if (!strcmp(text, "video")) {
+            G.joydiv_background = JOYDIV_BACKGROUND_VIDEO;
+        } else if (!strcmp(text, "color")) {
+            G.joydiv_background = JOYDIV_BACKGROUND_COLOR;
+        } else if (!strcmp(text, "black")) {
+            G.joydiv_background = JOYDIV_BACKGROUND_COLOR;
+            G.joydiv_background_color = 0x000000u;
+        } else {
+            fprintf(stderr, "invalid joydiv background: %s (expected black, color, or video)\n",
+                    text);
+            free(copy);
+            exit(1);
+        }
+    } else if (!strcmp(key, "color")) {
+        if (parse_hex_color(text, &G.joydiv_background_color) < 0) {
+            fprintf(stderr, "invalid joydiv color: %s (expected RRGGBB)\n", text);
+            free(copy);
+            exit(1);
+        }
+    } else if (!strcmp(key, "alpha")) {
+        errno = 0;
+        char *end;
+        long value = strtol(text, &end, 10);
+        if (!*text || *end || errno == ERANGE || value < 0 || value > 255) {
+            fprintf(stderr, "invalid joydiv alpha: %s (expected 0..255)\n", text);
+            free(copy);
+            exit(1);
+        }
+        G.joydiv_alpha = (int)value;
+    } else {
+        fprintf(stderr, "unknown joydiv option: %s\n", key);
+        free(copy);
+        exit(1);
+    }
+    free(copy);
+}
+
 void config_print_slic_params(void) {
     if (G.slic_params_action == SLIC_PARAMS_LIST) {
         for (size_t i = 0; i < sizeof(slic_parameters) / sizeof(slic_parameters[0]); i++)
@@ -384,19 +559,35 @@ void config_parse_args(int argc, char **argv) {
         case 'd': G.ddev = optarg; break;
         case 's': parse_wh(optarg, &G.capw, &G.caph); break;
         case 'c':
+            if (!strcmp(G.visualizer, "joydiv")) {
+                fprintf(stderr, "-c is not supported with -V joydiv\n");
+                exit(1);
+            }
             if (strcmp(G.visualizer, "slic")) parse_wh(optarg, &G.cw, &G.ch);
             break;
         case 'o': parse_wh(optarg, &G.outw, &G.outh); break;
         case 't': G.nworkers = atoi(optarg); break;
         case 'f':
+            if (!strcmp(G.visualizer, "joydiv")) {
+                fprintf(stderr, "-f is not supported with -V joydiv\n");
+                exit(1);
+            }
             if (strcmp(G.visualizer, "slic")) G.font_path = optarg;
             break;
         case 'r':
+            if (!strcmp(G.visualizer, "joydiv")) {
+                fprintf(stderr, "-r is not supported with -V joydiv\n");
+                exit(1);
+            }
             if (strcmp(G.visualizer, "slic")) parse_codepoint_ranges_arg(optarg);
             break;
         case 'F': G.focus_value = atoi(optarg); break;
         case 'p': parse_camera_params_arg(optarg); break;
         case 'g':
+            if (!strcmp(G.visualizer, "joydiv")) {
+                fprintf(stderr, "-g is not supported with -V joydiv\n");
+                exit(1);
+            }
             if (!strcmp(G.visualizer, "slic")) {
                 uint32_t fg, bg;
                 if (optind < normalized_argc &&
@@ -415,8 +606,9 @@ void config_parse_args(int argc, char **argv) {
         case 'm': G.hflip = 0; break;
         case 'V':
             if (strcmp(optarg, "glyph") && strcmp(optarg, "delaunay") &&
-                strcmp(optarg, "slic")) {
-                fprintf(stderr, "unknown visualizer: %s (expected glyph, delaunay, or slic)\n", optarg);
+                strcmp(optarg, "slic") && strcmp(optarg, "joydiv")) {
+                fprintf(stderr, "unknown visualizer: %s (expected glyph, delaunay, slic, or joydiv)\n",
+                        optarg);
                 exit(1);
             }
             G.visualizer = optarg;
@@ -429,9 +621,13 @@ void config_parse_args(int argc, char **argv) {
                     "autofocus; omit for autofocus)] [-g [FGHEX:BGHEX] (luminosity, or bichrome "
                     "e.g. -g 11ee11:1111ee)] [-m (disable mirror, default mirrored)] "
                     "[-p [PARAM_NAME|@PARAM_NAME|PARAM_NAME=value[,PARAM_NAME=value...]]] "
-                    "[-V glyph|delaunay|slic] "
-                    "[-a POINTS[,EDGE_WEIGHT[,SEED]]|SLIC_PARAMETER[=VALUE]]\n"
-                    "  RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation\n",
+                    "[-V glyph|delaunay|slic|joydiv] "
+                    "[-a POINTS[,EDGE_WEIGHT[,SEED]]|SLIC_PARAMETER[=VALUE]|JOYDIV_KEY=VALUE]\n"
+                    "  RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation\n"
+                    "  JOYDIV: zone=X.Y+W.H, grouprows=N, yvalue=lum|color, "
+                    "lines=straight|bezier, b=N,\n"
+                    "          bez-tension=F, bez-smooth=F, background=black|color|video, "
+                    "color=RRGGBB, alpha=N\n",
                     argv[0]);
             exit(1);
     }
@@ -439,6 +635,8 @@ void config_parse_args(int argc, char **argv) {
     for (int i = 0; i < visualizer_option_count; i++) {
         if (!strcmp(G.visualizer, "slic"))
             parse_slic_options(visualizer_options[i]);
+        else if (!strcmp(G.visualizer, "joydiv"))
+            parse_joydiv_options(visualizer_options[i]);
         else
             parse_delaunay_options(visualizer_options[i]);
     }
@@ -462,6 +660,28 @@ void config_parse_args(int argc, char **argv) {
 }
 
 void config_derive_grid(void) {
+    if (!strcmp(G.visualizer, "joydiv")) {
+        if (G.joydiv_grouprows < 1) {
+            fprintf(stderr, "joydiv grouprows must be positive\n");
+            exit(1);
+        }
+        if (G.joydiv_zone_count == 0)
+            joydiv_add_zone(0, 0, G.capw, G.caph);
+        for (int i = 0; i < G.joydiv_zone_count; i++) {
+            const joydiv_zone_t *zone = &G.joydiv_zones[i];
+            if (zone->x < 0 || zone->y < 0 || zone->w < 1 || zone->h < 1 ||
+                (int64_t)zone->x + zone->w > G.capw ||
+                (int64_t)zone->y + zone->h > G.caph) {
+                fprintf(stderr, "joydiv zone %d.%d+%d.%d is outside the %dx%d capture frame\n",
+                        zone->x, zone->y, zone->w, zone->h, G.capw, G.caph);
+                exit(1);
+            }
+        }
+        G.denom = 1;
+        G.scw = G.sch = 1;
+        G.gw = G.gh = 1;
+        return;
+    }
     if (!strcmp(G.visualizer, "slic")) {
         if (G.slic_downscale != 1 && G.slic_downscale != 2 &&
             G.slic_downscale != 4 && G.slic_downscale != 8) {

@@ -6,3 +6,4 @@ fonts
 candidate-dependencies/
 tests/test_delaunay
 tests/test_slic
+tests/test_joydiv

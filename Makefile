@@ -48,7 +48,7 @@ $(FAST_SLIC_DIR)/src/%.o: $(FAST_SLIC_DIR)/src/%.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -w -c -o $@ $<
 
 clean:
-	rm -f $(OBJ) $(BIN) tests/test_delaunay tests/test_slic
+	rm -f $(OBJ) $(BIN) tests/test_delaunay tests/test_slic tests/test_joydiv
 
 tests/test_delaunay: tests/test_delaunay.c src/delaunay.c src/delaunay.h
 	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_delaunay.c src/delaunay.c -lm
@@ -56,6 +56,10 @@ tests/test_delaunay: tests/test_delaunay.c src/delaunay.c src/delaunay.h
 tests/test_slic: tests/test_slic.cpp src/slic_analyzer.o src/slic_visualizer.o src/config.o src/camera_controls.o $(FAST_SLIC_SRC:.cpp=.o)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $^ -ljpeg -lm
 
-test: tests/test_delaunay tests/test_slic
+tests/test_joydiv: tests/test_joydiv.c src/joydiv_analyzer.c src/joydiv_visualizer.c src/joydiv_analyzer.h src/joydiv_visualizer.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/test_joydiv.c src/joydiv_analyzer.c src/joydiv_visualizer.c -ljpeg -lm
+
+test: tests/test_delaunay tests/test_slic tests/test_joydiv
 	./tests/test_delaunay
 	./tests/test_slic
+	./tests/test_joydiv

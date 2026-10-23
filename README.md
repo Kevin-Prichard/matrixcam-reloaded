@@ -24,6 +24,8 @@ compiler target.
 - `delaunay_visualizer.{h,c}` - image-colored, edge-biased triangle mosaic
 - `slic_analyzer.{h,cpp}` - fast-slic JPEG decode and superpixel assignment
 - `slic_visualizer.{h,c}` - threaded SLIC superpixel rendering
+- `joydiv_analyzer.{h,c}` - zone/row-group column averages for squiggle plots
+- `joydiv_visualizer.{h,c}` - Unknown Pleasures-style line rendering
 - `display.{h,c}` - DRM/KMS scanout + page flipping
 - `main.c` - wires the modules together
 
@@ -34,7 +36,7 @@ touching capture, display, or each other.
 ### CLI options
 ```
 $ ./cellavg -h
-usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue] [-g [FGHEX:BGHEX]] [-m] [-p [camera parameters]] [-V glyph|delaunay|slic] [-a POINTS[,EDGE_WEIGHT[,SEED]]|SLIC_PARAMETER[=VALUE]]
+usage: ./cellavg [-v /dev/videoN] [-d /dev/dri/cardN] [-s CAPWxCAPH] [-c CELLWxCELLH] [-o OUTWxOUTH] [-t workers] [-f FONT] [-r RANGE[,RANGE...]] [-F focusvalue] [-g [FGHEX:BGHEX]] [-m] [-p [camera parameters]] [-V glyph|delaunay|slic|joydiv] [-a POINTS[,EDGE_WEIGHT[,SEED]]|SLIC_PARAMETER[=VALUE]|JOYDIV_KEY=VALUE]
 RANGE: uHH-uHH, uHHHH-uHHHH, uHHHHHH-uHHHHHH, or U+HH-U+HH notation
 ```
 
@@ -68,7 +70,27 @@ must also fit within the actual captured frame. `-d`, `-F`, `-p`, `-s`, and
 `-o` retain their usual device, focus, camera-control, capture-size, and
 output-size meanings.
 
-Run the Delaunay geometry and SLIC analyzer/render tests with `make test`.
+Select the Joy Division/Unknown Pleasures squiggle visualizer with `-V joydiv`.
+It decodes the frame, groups scanlines, and draws per-column averages as
+polylines or Catmull-Rom-derived cubic Béziers inside one or more zones. Its
+the `zone` key is repeatable; other plot options apply to every zone:
+```
+$ sudo ./cellavg -V joydiv -s 1280x720 -o 1280x720 \
+  -a zone=0.0+1280.360 -a grouprows=4 -a yvalue=lum \
+  -a lines=bezier -a b=24 -a background=video -a alpha=255
+```
+Supported keys are `zone=X.Y+W.H`, `grouprows=N`, `yvalue=lum|color`,
+`lines=straight|bezier`, `b=N` (attenuation border in capture pixels),
+`bez-tension=F`, `bez-smooth=F`, `background=black|color|video`,
+`color=RRGGBB`, and `alpha=0..255`. If no `zone` is provided, the full capture
+frame is used. Zones are specified in pre-mirror capture coordinates and must
+lie inside the capture frame. `yvalue=color` draws separate red, green, and
+blue traces. The default background is black; `background=video` overlays the
+plots on the source frame. `-c`, `-f`, `-r`, and `-g` are rejected in joydiv
+mode.
+
+Run the Delaunay geometry, SLIC analyzer/render, and joydiv analyzer/render
+tests with `make test`.
 
 ### Camera controls
 V4L2 camera controls can be inspected before startup or set at startup with

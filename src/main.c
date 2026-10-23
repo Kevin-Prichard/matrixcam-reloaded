@@ -22,6 +22,8 @@
 #include "delaunay_visualizer.h"
 #include "slic_analyzer.h"
 #include "slic_visualizer.h"
+#include "joydiv_analyzer.h"
+#include "joydiv_visualizer.h"
 #include "display.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,12 +47,20 @@ int main(int argc, char **argv) {
 
     int glyph_ready = !strcmp(G.visualizer, "glyph");
     int slic_ready = !strcmp(G.visualizer, "slic");
+    int joydiv_ready = !strcmp(G.visualizer, "joydiv");
     if (glyph_ready) glyph_atlas_init();
     display_init();
     const drmModeModeInfo *mode = display_mode();
+    if (joydiv_ready && joydiv_analyzer_configure(mode->hdisplay, mode->vdisplay) < 0) {
+        display_shutdown();
+        capture_shutdown();
+        return 1;
+    }
     const visualizer_t *vis = glyph_ready ? &glyph_visualizer
-        : slic_ready ? &slic_visualizer : &delaunay_visualizer;
-    const frame_analyzer_t *analyzer = slic_ready ? &slic_analyzer : &cell_analyzer;
+        : slic_ready ? &slic_visualizer
+        : joydiv_ready ? &joydiv_visualizer : &delaunay_visualizer;
+    const frame_analyzer_t *analyzer = slic_ready ? &slic_analyzer
+        : joydiv_ready ? &joydiv_analyzer : &cell_analyzer;
     if (vis->init(G.gw, G.gh, mode->hdisplay, mode->vdisplay) < 0) {
         vis->shutdown();
         display_shutdown();
@@ -59,6 +69,10 @@ int main(int argc, char **argv) {
     }
     if (slic_ready)
         printf("visualizer %s; frame %dx%d pixels\n", vis->name, G.gw, G.gh);
+    else if (joydiv_ready)
+        printf("visualizer %s; %d zone(s), %d rows/line, output %dx%d\n",
+               vis->name, G.joydiv_zone_count, G.joydiv_grouprows,
+               mode->hdisplay, mode->vdisplay);
     else
         printf("visualizer %s; grid %dx%d cells (%dx%d px each, jpeg scale 1/%d)\n",
                vis->name, G.gw, G.gh, G.cw, G.ch, G.denom);
