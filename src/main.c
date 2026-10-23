@@ -118,6 +118,8 @@ int main(int argc, char **argv) {
         if (fresh) {
             int back = 1 - front;
             display_buffer_t *buf = display_buffer(back);
+            /* clear full buffer size */
+            memset(buf->map, 0, (size_t)mode->hdisplay * buf->pitch);
             vis->render(local, buf->map, buf->pitch);
             if (display_present(back) == 0) {
                 front = back;
@@ -125,6 +127,8 @@ int main(int argc, char **argv) {
             } else {
                 fprintf(stderr, "main: display_present failed for back=%d, skipping swap (front=%d)\n", back, front);
             }
+        } else {
+            /* no fresh frame */
         }
 
         uint64_t now = now_us();

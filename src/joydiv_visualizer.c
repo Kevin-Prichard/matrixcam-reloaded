@@ -273,6 +273,13 @@ static void visualizer_render(const void *cells, uint8_t *fb_map, uint32_t fb_pi
         header->zone_count < 1 ||
         header->grouprows < 1) return;
 
+    static int vdiag = 0;
+    if (vdiag < 5) {
+        fprintf(stderr, "joydiv_vis: hflip=%d bg=%d out=%dx%d pitch=%u\n", G.hflip,
+                G.joydiv_background, output_width, output_height, fb_pitch);
+        vdiag++;
+    }
+
     if (G.joydiv_background == JOYDIV_BACKGROUND_VIDEO) {
         const uint8_t *frame = (const uint8_t *)cells + header->frame_offset;
         for (int y = 0; y < output_height; y++) {
@@ -281,8 +288,9 @@ static void visualizer_render(const void *cells, uint8_t *fb_map, uint32_t fb_pi
                 int source_x = G.hflip ? output_width - 1 - x : x;
                 const uint8_t *pixel =
                     frame + ((size_t)y * (size_t)output_width + (size_t)source_x) * 3;
-                row[x] = (uint32_t)pixel[0] << 16 |
-                         (uint32_t)pixel[1] << 8 | pixel[2];
+                /* write in order */
+                uint32_t val = (uint32_t)pixel[0] << 16 | (uint32_t)pixel[1] << 8 | (uint32_t)pixel[2];
+                row[x] = val;
             }
         }
     } else {

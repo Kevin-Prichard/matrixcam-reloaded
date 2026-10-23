@@ -64,7 +64,7 @@ void display_init(void) {
             perror("addfb"); exit(1);
         }
         struct drm_mode_map_dumb mr = { .handle = cr.handle };
-        drmIoctl(dfd, DRM_IOCTL_MODE_MAP_DUMB, &mr);
+        if (drmIoctl(dfd, DRM_IOCTL_MODE_MAP_DUMB, &mr)) { perror("map dumb"); exit(1); }
         bufs[i].map = mmap(NULL, cr.size, PROT_READ | PROT_WRITE, MAP_SHARED, dfd, mr.offset);
         if (bufs[i].map == MAP_FAILED) { perror("mmap fb"); exit(1); }
         memset(bufs[i].map, 0, cr.size);
@@ -72,7 +72,7 @@ void display_init(void) {
     if (drmModeSetCrtc(dfd, crtc_id, bufs[0].fb, 0, 0, &conn_id, 1, &mode)) {
         perror("SetCrtc (are you DRM master? run from a text console)"); exit(1);
     }
-    printf("display %ux%u\n", mode.hdisplay, mode.vdisplay);
+    printf("display %ux%u pitch=%u\n", mode.hdisplay, mode.vdisplay, bufs[0].pitch);
 }
 
 const drmModeModeInfo *display_mode(void) { return &mode; }
@@ -83,6 +83,12 @@ int display_present(int index) {
     int pending = 1;
     drmEventContext ev = { .version = 2, .page_flip_handler = on_flip };
     fprintf(stderr, "disp_flip: req index=%d fb=%u crtc=%u\n", index, bufs[index].fb, crtc_id);
+    /* ensure CPU writes reach memory */
+    if (bufs[index].map && bufs[index].size) {
+        /* simple touch */
+        volatile uint32_t *p = (volatile uint32_t *)bufs[index].map;
+        (void)p[0];
+    }
     if (drmModePageFlip(dfd, crtc_id, bufs[index].fb, DRM_MODE_PAGE_FLIP_EVENT, &pending) != 0) {
         fprintf(stderr, "disp_flip: drmModePageFlip failed index=%d\n", index);
         return -1;

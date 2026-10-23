@@ -226,6 +226,8 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
     jpeg_start_decompress(&ctx->ci);
     if ((int)ctx->ci.output_width != G.capw ||
         (int)ctx->ci.output_height != G.caph) {
+        fprintf(stderr, "joydiv_analyzer: size mismatch %dx%d vs %dx%d\n",
+                ctx->ci.output_width, ctx->ci.output_height, G.capw, G.caph);
         jpeg_abort_decompress(&ctx->ci);
         return -1;
     }
@@ -240,10 +242,15 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
             ctx->zone_group[i] = -1;
             ctx->zone_rows[i] = 0;
         }
-        memset(frame, 0, (size_t)display_width * (size_t)display_height * 3);
 
         static int diag_frame = 0;
-        int rows_written = 0;
+        unsigned char *row_written = calloc((size_t)display_height, 1);
+        if (!row_written) {
+            jpeg_abort_decompress(&ctx->ci);
+            return -1;
+        }
+        /* ensure full frame zeroed before filling */
+        memset(frame, 0, (size_t)display_width * (size_t)display_height * 3);
         for (int y = 0; y < G.caph; y++) {
             JSAMPROW row = ctx->rowbuf;
             if (jpeg_read_scanlines(&ctx->ci, &row, 1) != 1) {
@@ -252,12 +259,13 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
                 return -1;
             }
 
-            int first_display_row =
-                (int)(((int64_t)y * display_height + G.caph - 1) / G.caph);
-            int end_display_row =
-                (int)(((int64_t)(y + 1) * display_height + G.caph - 1) / G.caph);
+            int first_display_row = (int)((int64_t)y * display_height / G.caph);
+            int end_display_row = (int)((int64_t)(y + 1) * display_height / G.caph);
+            if (first_display_row >= display_height) continue;
             if (end_display_row > display_height) end_display_row = display_height;
+            if (end_display_row <= first_display_row) end_display_row = first_display_row + 1;
             if (first_display_row < 0) first_display_row = 0;
+            /* ensure no gaps by extending previous if needed - not necessary, but track */
             if (first_display_row < end_display_row) {
                 for (int x = 0; x < display_width; x++) {
                     int source_x = ctx->xmap[x];
@@ -270,7 +278,8 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
                      display_y++) {
                     memcpy(frame + (size_t)display_y * (size_t)display_width * 3,
                            ctx->disprow, (size_t)display_width * 3);
-                    rows_written++;
+                    if (display_y >= 0 && display_y < display_height)
+                        row_written[display_y] = 1;
                 }
                 if (diag_frame < 3 && y == 0) {
                     fprintf(stderr, "joydiv_diag: cap %dx%d -> disp %dx%d first=%d end=%d\n",
@@ -312,15 +321,14 @@ static int process(joydiv_ctx_t *ctx, const uint8_t *data, size_t len, uint8_t *
     for (int i = 0; i < layout.zone_count; i++)
         finalize_group(ctx, i, out);
     jpeg_abort_decompress(&ctx->ci);
+    int filled = 0;
+    for (int i = 0; i < display_height; i++) if (row_written[i]) filled++;
     diag_frame++;
-    if (diag_frame % 30 == 0) {
+    if (diag_frame % 30 == 0 || filled != display_height) {
         fprintf(stderr, "joydiv_analyzer_diag: frame=%d filled=%d/%d display rows\n",
-                diag_frame, rows_written, display_height);
+                diag_frame, filled, display_height);
     }
-    if (rows_written != display_height) {
-        fprintf(stderr, "joydiv_analyzer_diag: INCOMPLETE frame=%d filled=%d/%d\n",
-                diag_frame, rows_written, display_height);
-    }
+    free(row_written);
     return 0;
 }
 

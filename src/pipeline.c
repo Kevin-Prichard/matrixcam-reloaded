@@ -66,7 +66,10 @@ static void *worker_main(void *arg) {
                 latest_seq = s->seq;
                 pthread_cond_signal(&cv_res);
             }
-        } else st.bad++;
+        } else {
+            st.bad++;
+            fprintf(stderr, "pipeline: analyzer %s failed on seq %llu\n", active_analyzer->name, (unsigned long long)s->seq);
+        }
         s->state = S_FREE;
         pthread_mutex_unlock(&mu);
     }
