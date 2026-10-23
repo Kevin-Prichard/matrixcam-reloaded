@@ -99,3 +99,49 @@ $ sudo ./cellavg -s 1920x1080 -c 16x16 -o 1920x1080 -F 127 -f fonts/NotoSansJP-R
 # Emojis (one code page, try others and document)
 $ sudo ./cellavg -s 1920x1080 -c 32x32 -o 1920x1080 -F 127 -f fonts/NotoEmoji-Regular.ttf -r u1000-u2fff
 ```
+#### Favorite patterns-
+
+1. SLIC at lower resolution has a higher frame rate and more stable appearance. Bumping up contrast, sat, gain and gamma makes colors more vivid
+```bash
+$ sudo -E ./cellavg -s 640x480 -o 640x480 -F 127 -V slic -a clusters=100,iterations=3,downscale=2 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3
+```
+2. Emoji Matrixcam
+```bash
+$ sudo ./cellavg -s 1920x1080 -c 16x16 -o 1920x1080 -F 127 -f fonts/NotoEmoji-Regular.ttf -r u1000-u2fff
+```
+3. Japanese Han Matrixcam
+```bash
+$ sudo ./cellavg -s 1920x1080 -c 16x16 -o 1920x1080 -F 127 -f fonts/NotoSansJP-Regular.ttf -r u2F00-u2FFF -g 119911:112211
+```
+4. Delaunay triangulation -higher resolution so slower fps
+```bash
+$ sudo ./cellavg -s 1920x1080 -o 1920x1080 -V delaunay -a 200,50,654364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+5. Delaunay at lower camera res, slightly higher fps
+```bash
+$ sudo ./cellavg -s 640x480 -o 1920x1080 -V delaunay -a 200,50,654364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+6. Delaunay at lower camera and output res, near native fps 25-30
+```bash
+$ sudo ./cellavg -s 640x480 -o 640x480 -V delaunay -a 200,50,654364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+7. Delaunay at lower camera and output res, near native fps 25-30
+```bash
+$ sudo ./cellavg -s 640x480 -o 640x480 -V delaunay -a 200,50,654364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+8. Delaunay at very low camera w/ native output res, around 9 fps
+```bash
+$ sudo ./cellavg -s 320x240 -o 1920x1080 -V delaunay -a 200,50,654364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+9. Delaunay at very low camera w/ native output res, around 9 fps
+```bash
+$ sudo ./cellavg -s 320x240 -o 1920x1080 -V delaunay -a 16,50,653422364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+10. Delaunay at very low camera w/ native output res, around 9 fps
+```bash
+$ sudo ./cellavg -s 320x240 -o 1920x1080 -V delaunay -a 300,50,654364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
+11. Delaunay at very low camera w/ native output res and high POINTS and EDGE_WEIGHT, around 3 fps
+```bash
+$ sudo ./cellavg -s 320x240 -o 1920x1080 -V delaunay -a 1000,100,653422364 -p contrast=64,sat=96,wb_auto=1,gain=100,gamma=72,autoexp=3,brightness=32
+```
