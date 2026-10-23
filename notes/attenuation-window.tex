@@ -1,0 +1,50 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+
+\begin{document}
+
+\section*{Attenuation Window}
+
+Assume \(0<b\le w/2\), \(x\in[0,w]\), and \(y\in[0,h]\). Let the distance
+to the nearest horizontal edge be
+\[
+  d(x)=\min(x,\,w-x),
+\]
+and define the smoothstep ramp
+\[
+  S(u)=3u^{2}-2u^{3},\qquad u\in[0,1].
+\]
+Then the attenuation window is
+\[
+  A(x)=
+  \begin{cases}
+    0, & d(x)\le b,\\[4pt]
+    S\!\left(\dfrac{d(x)-b}{b}\right), & b<d(x)<2b,\\[10pt]
+    1, & d(x)\ge 2b,
+  \end{cases}
+\]
+and the desired function is
+\[
+  \boxed{
+    f(x,y,b,w,h)=y\,A(x)
+  }
+\]
+so that \(f\) is zero on \(0\le x\le b\) and \(w-b\le x\le w\), rises
+smoothly from \(0\) to \(y\) on \(b<x<2b\) and \(w-2b<x<w-b\), and equals
+\(y\) in the middle region \(2b\le x\le w-2b\).
+
+Equivalently, in compact form,
+\[
+  f(x,y,b,w,h)
+  =
+  y\left[3u^{2}-2u^{3}\right],
+  \qquad
+  u=\operatorname{clamp}\!\left(\frac{\min(x,w-x)-b}{b},0,1\right),
+\]
+where \(\operatorname{clamp}(t,0,1)=\max(0,\min(t,1))\).
+
+Here \(h\) only fixes the vertical range \(y\in[0,h]\); it does not affect
+the horizontal attenuation. For a linear rather than smooth ramp, use
+\(S(u)=u\).
+
+\end{document}

@@ -1,0 +1,73 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb}
+
+\begin{document}
+
+Let the 2D plane be a matrix
+\[
+  A \in \mathbb{R}^{M \times N},
+  \qquad A_{i,j},\quad i=1,\dots,M,\quad j=1,\dots,N,
+\]
+where \(i\) indexes rows and \(j\) indexes columns.
+
+Partition the rows into \(K\) consecutive groups
+\[
+  \{1,\dots,M\} = \bigcup_{k=1}^{K} G_k,
+  \qquad
+  G_k = \{r_{k-1}+1,\dots,r_k\},
+\]
+with
+\[
+  0 = r_0 < r_1 < \cdots < r_K = M.
+\]
+
+The scan proceeds by groups. For each group \(G_k\), scan its rows in increasing order,
+\[
+  i \in G_k,
+\]
+and within each row scan the columns in increasing order,
+\[
+  j = 1,\dots,N.
+\]
+
+For a single row \(i\), the column average is
+\[
+  \mu_i
+  =
+  \frac{1}{N}\sum_{j=1}^{N} A_{i,j}.
+\]
+
+For a group \(G_k\), the corresponding column-wise average vector is
+\[
+  \mu_{k,j}
+  =
+  \frac{1}{|G_k|}
+  \sum_{i\in G_k} A_{i,j},
+  \qquad j=1,\dots,N,
+\]
+where \(|G_k| = r_k-r_{k-1}\).
+
+The overall average over all columns in the rows of group \(G_k\) is
+\[
+  \overline{A}_k
+  =
+  \frac{1}{N\,|G_k|}
+  \sum_{i\in G_k}\sum_{j=1}^{N} A_{i,j}
+  =
+  \frac{1}{|G_k|}
+  \sum_{i\in G_k} \mu_i.
+\]
+
+Equivalently, as a sequential scan,
+\[
+  \overline{A}_k
+  =
+  \frac{1}{|G_k|}
+  \sum_{i=r_{k-1}+1}^{r_k}
+  \left(
+    \frac{1}{N}\sum_{j=1}^{N} A_{i,j}
+  \right),
+  \qquad k=1,\dots,K.
+\]
+
+\end{document}

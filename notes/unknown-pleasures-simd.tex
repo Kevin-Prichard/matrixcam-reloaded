@@ -1,0 +1,211 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+
+\begin{document}
+
+\section*{Cache-Line- and SIMD-Aware Scan}
+
+Let the two-dimensional plane be
+\[
+  A \in \mathbb{R}^{M\times N},
+  \qquad A_{i,j},\quad i=1,\dots,M,\quad j=1,\dots,N,
+\]
+where \(i\) indexes rows and \(j\) indexes columns.
+
+\subsection*{Hardware model}
+
+Let
+\[
+  B = \text{cache-line size in bytes},\qquad
+  s = \text{bytes per element},
+\]
+so that one cache line contains
+\[
+  E = \frac{B}{s}
+\]
+elements.  Let \(w\) be the SIMD width, i.e.\ the number of elements processed
+simultaneously by one vector instruction.  Assume
+\[
+  w \mid E,
+  \qquad
+  V = \frac{E}{w},
+\]
+so that each cache line contains \(V\) SIMD vectors.
+
+Because the memory system transfers entire cache lines, columns are processed
+in cache-line blocks.  Rows are padded to a cache-line boundary:
+\[
+  N_p = \left\lceil \frac{N}{E}\right\rceil E,
+  \qquad
+  L = \left\lceil \frac{N}{E}\right\rceil,
+\]
+where \(L\) is the number of cache lines touched by one row.  The padding
+columns are never counted in the average.
+
+\subsection*{Row groups}
+
+Partition the rows into consecutive groups
+\[
+  \{1,\dots,M\} = \bigcup_{k=1}^{K} G_k,
+  \qquad
+  G_k = \{r_{k-1}+1,\dots,r_k\},
+\]
+with
+\[
+  0=r_0<r_1<\cdots<r_K=M,
+  \qquad
+  |G_k|=g_k=r_k-r_{k-1}.
+\]
+The group size is chosen so that the group working set fits in cache:
+\[
+  g_k\,s\,N_p \le C_{\mathrm{cache}},
+  \qquad
+  g_k\le \left\lfloor \frac{C_{\mathrm{cache}}}{sN_p}\right\rfloor .
+\]
+Thus a row group is scanned while its data remains cache-resident.
+
+\subsection*{SIMD column blocks}
+
+For cache line \(\ell=1,\dots,L\) and SIMD block \(q=1,\dots,V\), define the
+column indices
+\[
+  j_{\ell,q,p}
+  =
+  (\ell-1)E+(q-1)w+p,
+  \qquad
+  p=1,\dots,w.
+\]
+Let the corresponding SIMD load be
+\[
+  \mathbf{a}_{i,\ell,q}
+  =
+  \begin{bmatrix}
+    A_{i,j_{\ell,q,1}}\\
+    A_{i,j_{\ell,q,2}}\\
+    \vdots\\
+    A_{i,j_{\ell,q,w}}
+  \end{bmatrix}
+  \in \mathbb{R}^{w}.
+\]
+The tail mask is
+\[
+  \mathbf{m}_{\ell,q}
+  =
+  \begin{bmatrix}
+    m_{\ell,q,1}\\
+    \vdots\\
+    m_{\ell,q,w}
+  \end{bmatrix},
+  \qquad
+  m_{\ell,q,p}
+  =
+  \begin{cases}
+    1, & j_{\ell,q,p}\le N,\\
+    0, & j_{\ell,q,p}>N.
+  \end{cases}
+\]
+
+\subsection*{Vectorized row and group averages}
+
+For row \(i\), accumulate the masked SIMD vectors:
+\[
+  \mathbf{s}_i
+  =
+  \sum_{\ell=1}^{L}\sum_{q=1}^{V}
+  \mathbf{a}_{i,\ell,q}\odot \mathbf{m}_{\ell,q}.
+\]
+The row average is the horizontal reduction
+\[
+  \mu_i
+  =
+  \frac{1}{N}
+  \sum_{p=1}^{w}[\mathbf{s}_i]_p.
+\]
+
+For group \(G_k\), accumulate the row accumulators:
+\[
+  \mathbf{s}_{G_k}
+  =
+  \sum_{i\in G_k}\mathbf{s}_i.
+\]
+The average over all columns in the rows of \(G_k\) is
+\[
+  \overline{A}_k
+  =
+  \frac{1}{N g_k}
+  \sum_{p=1}^{w}[\mathbf{s}_{G_k}]_p
+  =
+  \frac{1}{g_k}\sum_{i\in G_k}\mu_i.
+\]
+
+If the column-wise average vector over the group is also required, define
+\[
+  \mathbf{c}_{k,\ell,q}
+  =
+  \sum_{i\in G_k}\mathbf{a}_{i,\ell,q},
+  \qquad
+  \mu_{k,j_{\ell,q,p}}
+  =
+  \frac{[\mathbf{c}_{k,\ell,q}]_p}{g_k},
+\]
+for \(j_{\ell,q,p}\le N\).  Equivalently,
+\[
+  \mu_{k,j}
+  =
+  \frac{1}{g_k}\sum_{i\in G_k}A_{i,j},
+  \qquad
+  \overline{A}_k
+  =
+  \frac{1}{N}\sum_{j=1}^{N}\mu_{k,j}.
+\]
+
+\subsection*{Blocked scan}
+
+\[
+\begin{aligned}
+&\textbf{for } k=1,\dots,K:\\
+&\quad \mathbf{s}_{G_k}\leftarrow \mathbf{0}\\
+&\quad \textbf{for } i\in G_k:\\
+&\qquad \mathbf{s}_i\leftarrow \mathbf{0}\\
+&\qquad \textbf{for } \ell=1,\dots,L:\\
+&\qquad\quad \textbf{for } q=1,\dots,V:\\
+&\qquad\qquad \mathbf{a}\leftarrow
+  \operatorname{SIMD\_LOAD}(A_{i,j_{\ell,q,1}},\dots,A_{i,j_{\ell,q,w}})\\
+&\qquad\qquad \mathbf{s}_i\leftarrow
+  \mathbf{s}_i+\mathbf{a}\odot\mathbf{m}_{\ell,q}\\
+&\qquad \mu_i\leftarrow \frac{1}{N}
+  \sum_{p=1}^{w}[\mathbf{s}_i]_p
+  \quad\text{(if per-row output is needed)}\\
+&\qquad \mathbf{s}_{G_k}\leftarrow \mathbf{s}_{G_k}+\mathbf{s}_i\\
+&\quad \overline{A}_k\leftarrow
+  \frac{1}{Ng_k}\sum_{p=1}^{w}[\mathbf{s}_{G_k}]_p
+\end{aligned}
+\]
+
+\subsection*{Cost model}
+
+Each row touches \(L=\lceil N/E\rceil\) cache lines, so the total memory
+traffic is
+\[
+  T
+  =
+  \sum_{k=1}^{K} g_k L
+  =
+  M\left\lceil \frac{N}{E}\right\rceil
+  \quad\text{cache lines}.
+\]
+The number of SIMD vector operations is approximately
+\[
+  I
+  =
+  \sum_{k=1}^{K} g_k L V
+  =
+  \frac{MN}{w}
+  \quad\text{vector loads/adds},
+\]
+plus \(O(M)\) horizontal reductions if every row average is needed.
+Division is deferred until after accumulation, so the inner scan uses only
+vector loads, masks, and additions.
+
+\end{document}
